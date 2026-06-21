@@ -1,69 +1,41 @@
-import pygame
-import chess
+<!DOCTYPE html>
+<html>
+<head>
+    <title>JS Chess Game</title>
+</head>
+<body>
+    <canvas id="chessBoard" width="400" height="400" style="border:2px solid #333;"></canvas>
+    <p id="status">সাদা চাল দিন</p>
 
-# Constants
-WIDTH = 640
-HEIGHT = 640
-DIMENSION = 8
-SQ_SIZE = WIDTH // DIMENSION
+    <script>
+        const canvas = document.getElementById("chessBoard");
+        const ctx = canvas.getContext("2d");
+        const size = 50;
 
-# Initialize Pygame
-pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-board = chess.Board()
-font = pygame.font.SysFont("Arial", 32, bold=True)
+        // বোর্ড ড্র করার ফাংশন
+        function drawBoard() {
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    ctx.fillStyle = (r + c) % 2 === 0 ? "#f0d9b5" : "#b58863";
+                    ctx.fillRect(c * size, r * size, size, size);
+                }
+            }
+        }
 
-def draw_board(screen):
-    colors = [pygame.Color("white"), pygame.Color("gray")]
-    for r in range(DIMENSION):
-        for c in range(DIMENSION):
-            color = colors[((r + c) % 2)]
-            pygame.draw.rect(screen, color, pygame.Rect(c*SQ_SIZE, r*SQ_SIZE, SQ_SIZE, SQ_SIZE))
+        // মাউস ক্লিক হ্যান্ডলার
+        canvas.addEventListener("mousedown", function(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const col = Math.floor(x / size);
+            const row = Math.floor(y / size);
+            
+            document.getElementById("status").innerText = `আপনি ক্লিক করেছেন: কলাম ${col}, সারি ${row}`;
+            // এখানে আপনার পিস মুভমেন্ট লজিক যুক্ত হবে
+        });
 
-def draw_pieces(screen, board):
-    for r in range(DIMENSION):
-        for c in range(DIMENSION):
-            square = chess.square(c, 7 - r)
-            piece = board.piece_at(square)
-            if piece:
-                # পিসের রঙ ও নাম নির্ধারণ
-                color = "white" if piece.color == chess.WHITE else "black"
-                symbol = piece.unicode_symbol()
-                
-                # পিস ড্র করার জন্য টেক্সট রেন্ডার
-                text = font.render(symbol, True, pygame.Color(color))
-                # টেক্সটটি ঘরের মাঝখানে বসানোর জন্য
-                text_rect = text.get_rect(center=(c*SQ_SIZE + SQ_SIZE//2, r*SQ_SIZE + SQ_SIZE//2))
-                screen.blit(text, text_rect)
-
-def main():
-    running = True
-    selected_square = None
-    
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                location = pygame.mouse.get_pos()
-                col = location[0] // SQ_SIZE
-                row = 7 - (location[1] // SQ_SIZE)
-                square = chess.square(col, row)
-                
-                if selected_square is None:
-                    if board.piece_at(square):
-                        selected_square = square
-                else:
-                    move = chess.Move(selected_square, square, promotion=chess.QUEEN)
-                    if move in board.legal_moves:
-                        board.push(move)
-                    selected_square = None
-
-        draw_board(screen)
-        draw_pieces(screen, board)
-        pygame.display.flip()
-
-    pygame.quit()
-
-if __name__ == "__main__":
-    main()
+        drawBoard();
+    </script>
+</body>
+</html>
