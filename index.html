@@ -115,10 +115,11 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.85);
             z-index: 10000;
             justify-content: center;
             align-items: center;
+            backdrop-filter: blur(5px);
         }
 
         .login-modal.active {
@@ -126,7 +127,7 @@
         }
 
         .login-box {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(30, 30, 60, 0.95);
             backdrop-filter: blur(20px);
             padding: 40px;
             border-radius: 20px;
@@ -134,53 +135,112 @@
             max-width: 400px;
             width: 100%;
             text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            animation: modalIn 0.3s ease;
+        }
+
+        @keyframes modalIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
         }
 
         .login-box h2 {
             font-weight: 300;
-            margin-bottom: 10px;
+            margin-bottom: 5px;
             color: #00b894;
+            font-size: 28px;
         }
 
-        .login-box p {
+        .login-box .subtitle {
             opacity: 0.5;
             font-size: 14px;
             margin-bottom: 25px;
         }
 
-        .login-box input {
+        .login-box .password-wrapper {
+            position: relative;
             width: 100%;
-            padding: 14px 20px;
+            margin-bottom: 15px;
+        }
+
+        .login-box .password-wrapper input {
+            width: 100%;
+            padding: 14px 45px 14px 20px;
             border: 2px solid rgba(255, 255, 255, 0.2);
             border-radius: 10px;
             background: rgba(255, 255, 255, 0.05);
             color: white;
             font-size: 16px;
-            margin-bottom: 15px;
             transition: all 0.3s;
         }
 
-        .login-box input:focus {
+        .login-box .password-wrapper input:focus {
             outline: none;
             border-color: #00b894;
             background: rgba(255, 255, 255, 0.1);
         }
 
-        .login-box input::placeholder {
+        .login-box .password-wrapper input::placeholder {
             color: rgba(255, 255, 255, 0.3);
+        }
+
+        .login-box .password-wrapper .toggle-password {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 5px;
+            transition: all 0.3s;
+        }
+
+        .login-box .password-wrapper .toggle-password:hover {
+            color: white;
         }
 
         .login-box .btn {
             width: 100%;
             padding: 14px;
             font-size: 18px;
+            margin-top: 5px;
         }
 
         .login-box .error-msg {
             color: #f45c43;
-            margin-top: 10px;
+            margin-top: 12px;
             font-size: 14px;
             display: none;
+        }
+
+        .login-box .hint {
+            margin-top: 15px;
+            opacity: 0.3;
+            font-size: 12px;
+        }
+
+        .login-box .close-modal {
+            position: absolute;
+            top: 15px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 28px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .login-box .close-modal:hover {
+            color: white;
+            transform: rotate(90deg);
+        }
+
+        .login-box {
+            position: relative;
         }
 
         .admin-bar {
@@ -198,22 +258,28 @@
 
         .admin-bar .status {
             font-size: 14px;
-            opacity: 0.7;
+            opacity: 0.8;
         }
 
         .admin-bar .status .admin-badge {
-            background: #f7971e;
+            background: linear-gradient(45deg, #f7971e, #ffd200);
             color: #1a1a2e;
-            padding: 2px 12px;
+            padding: 3px 14px;
             border-radius: 12px;
-            font-weight: 600;
+            font-weight: 700;
             font-size: 12px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
         }
 
         .admin-bar .status .user-badge {
             background: rgba(255, 255, 255, 0.1);
             color: #aaa;
-            padding: 2px 12px;
+            padding: 3px 14px;
             border-radius: 12px;
             font-size: 12px;
         }
@@ -221,6 +287,28 @@
         .admin-bar .btn {
             padding: 8px 20px;
             font-size: 14px;
+        }
+
+        .admin-bar .btn-logout {
+            background: rgba(235, 51, 73, 0.2);
+            color: #ff6b6b;
+            border: 1px solid rgba(235, 51, 73, 0.3);
+        }
+
+        .admin-bar .btn-logout:hover {
+            background: rgba(235, 51, 73, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .admin-bar .btn-login {
+            background: rgba(0, 184, 148, 0.2);
+            color: #00b894;
+            border: 1px solid rgba(0, 184, 148, 0.3);
+        }
+
+        .admin-bar .btn-login:hover {
+            background: rgba(0, 184, 148, 0.4);
+            transform: translateY(-2px);
         }
 
         .header {
@@ -752,6 +840,7 @@
             z-index: 10001;
             justify-content: center;
             align-items: center;
+            backdrop-filter: blur(5px);
         }
 
         .edit-score-modal.active {
@@ -759,7 +848,7 @@
         }
 
         .edit-score-box {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(30, 30, 60, 0.95);
             backdrop-filter: blur(20px);
             padding: 30px;
             border-radius: 20px;
@@ -767,11 +856,19 @@
             max-width: 500px;
             width: 100%;
             text-align: center;
+            animation: modalIn 0.3s ease;
         }
 
         .edit-score-box h3 {
             margin-bottom: 15px;
             font-weight: 300;
+            color: #6c5ce7;
+        }
+
+        .edit-score-box p {
+            opacity: 0.5;
+            font-size: 14px;
+            margin-bottom: 15px;
         }
 
         .edit-score-box input {
@@ -787,7 +884,7 @@
 
         .edit-score-box input:focus {
             outline: none;
-            border-color: #00b894;
+            border-color: #6c5ce7;
         }
 
         .edit-score-box .btn-group {
@@ -809,8 +906,8 @@
             .teams-grid { grid-template-columns: 1fr; }
             .team-card .player-input-group { flex-direction: column; }
             .admin-bar { flex-direction: column; align-items: stretch; }
-            .login-box { padding: 25px; }
-            .edit-score-box { padding: 20px; }
+            .login-box { padding: 25px; margin: 15px; }
+            .edit-score-box { padding: 20px; margin: 15px; }
         }
 
         ::-webkit-scrollbar { width: 8px; }
@@ -824,12 +921,16 @@
         <!-- ===== লগইন মডাল ===== -->
         <div class="login-modal" id="loginModal">
             <div class="login-box">
+                <button class="close-modal" onclick="closeLoginModal()">✕</button>
                 <h2>🔐 অ্যাডমিন লগইন</h2>
-                <p>টিম ও প্লেয়ার ম্যানেজ করতে লগইন করুন</p>
-                <input type="password" id="loginPassword" placeholder="পাসওয়ার্ড দিন" />
-                <button class="btn btn-primary" onclick="loginAdmin()">লগইন করুন</button>
-                <div class="error-msg" id="loginError">❌ ভুল পাসওয়ার্ড!</div>
-                <div style="margin-top: 15px; opacity: 0.3; font-size: 12px;">ডিফল্ট পাসওয়ার্ড: admin123</div>
+                <p class="subtitle">টিম ও প্লেয়ার ম্যানেজ করতে লগইন করুন</p>
+                <div class="password-wrapper">
+                    <input type="password" id="loginPassword" placeholder="পাসওয়ার্ড দিন" />
+                    <button class="toggle-password" onclick="togglePasswordVisibility()">👁️</button>
+                </div>
+                <button class="btn btn-primary" onclick="loginAdmin()">🔑 লগইন করুন</button>
+                <div class="error-msg" id="loginError">❌ ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।</div>
+                <div class="hint">ডিফল্ট পাসওয়ার্ড: <strong>admin123</strong></div>
             </div>
         </div>
 
@@ -837,7 +938,7 @@
         <div class="edit-score-modal" id="editScoreModal">
             <div class="edit-score-box">
                 <h3>✏️ স্কোর এডিট করুন</h3>
-                <p style="opacity:0.5;font-size:14px;margin-bottom:15px;">বল নম্বর ও নতুন স্কোর দিন</p>
+                <p>বল নম্বর ও নতুন স্কোর দিন</p>
                 <input type="number" id="editBallIndex" placeholder="বল নম্বর (0 থেকে শুরু)" min="0" />
                 <input type="text" id="editBallValue" placeholder="নতুন স্কোর (0,1,2,3,4,6,W,WD,NB,B,LB)" />
                 <div class="btn-group">
@@ -853,11 +954,11 @@
         <div class="admin-bar">
             <div class="status">
                 <span id="adminStatus">👤 <span class="user-badge">ইউজার মোড</span></span>
-                <span style="margin-left: 15px; font-size: 13px; opacity: 0.5;">(শুধু দেখতে পারবেন)</span>
+                <span style="margin-left: 15px; font-size: 13px; opacity: 0.5;" id="adminStatusSub">(শুধু দেখতে পারবেন)</span>
             </div>
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                <button class="btn btn-primary" onclick="showLoginModal()">🔑 অ্যাডমিন লগইন</button>
-                <button class="btn btn-secondary" onclick="logoutAdmin()">🚪 লগআউট</button>
+                <button class="btn btn-login" onclick="showLoginModal()" id="loginBtn">🔑 অ্যাডমিন লগইন</button>
+                <button class="btn btn-logout" onclick="logoutAdmin()" id="logoutBtn" style="display:none;">🚪 লগআউট</button>
             </div>
         </div>
 
@@ -981,11 +1082,26 @@
         let isAdmin = false;
         const ADMIN_PASSWORD = 'admin123';
 
+        // পাসওয়ার্ড টগল
+        function togglePasswordVisibility() {
+            const input = document.getElementById('loginPassword');
+            const btn = document.querySelector('.toggle-password');
+            if (input.type === 'password') {
+                input.type = 'text';
+                btn.textContent = '🙈';
+            } else {
+                input.type = 'password';
+                btn.textContent = '👁️';
+            }
+        }
+
         function showLoginModal() {
             document.getElementById('loginModal').classList.add('active');
             document.getElementById('loginError').style.display = 'none';
             document.getElementById('loginPassword').value = '';
-            document.getElementById('loginPassword').focus();
+            document.getElementById('loginPassword').type = 'password';
+            document.querySelector('.toggle-password').textContent = '👁️';
+            setTimeout(() => document.getElementById('loginPassword').focus(), 100);
         }
 
         function closeLoginModal() {
@@ -996,10 +1112,8 @@
             const input = document.getElementById('loginPassword');
             if (input.value === ADMIN_PASSWORD) {
                 isAdmin = true;
-                document.getElementById('adminStatus').innerHTML = '👑 <span class="admin-badge">অ্যাডমিন মোড</span>';
-                document.getElementById('adminStatus').innerHTML += ' <span style="font-size:13px;opacity:0.5;margin-left:10px;">(সব কিছু পরিবর্তন করতে পারবেন)</span>';
-                closeLoginModal();
                 updateAdminUI();
+                closeLoginModal();
                 notifySuccess('🔑 অ্যাডমিন লগইন সফল!');
             } else {
                 document.getElementById('loginError').style.display = 'block';
@@ -1010,13 +1124,27 @@
 
         function logoutAdmin() {
             isAdmin = false;
-            document.getElementById('adminStatus').innerHTML = '👤 <span class="user-badge">ইউজার মোড</span>';
-            document.getElementById('adminStatus').innerHTML += ' <span style="font-size:13px;opacity:0.5;margin-left:10px;">(শুধু দেখতে পারবেন)</span>';
             updateAdminUI();
             notifyInfo('🚪 লগআউট করা হয়েছে।');
         }
 
         function updateAdminUI() {
+            // স্ট্যাটাস আপডেট
+            const statusEl = document.getElementById('adminStatus');
+            const statusSub = document.getElementById('adminStatusSub');
+            
+            if (isAdmin) {
+                statusEl.innerHTML = '👑 <span class="admin-badge">অ্যাডমিন মোড</span>';
+                statusSub.textContent = '(সব কিছু পরিবর্তন করতে পারবেন)';
+                document.getElementById('loginBtn').style.display = 'none';
+                document.getElementById('logoutBtn').style.display = 'inline-block';
+            } else {
+                statusEl.innerHTML = '👤 <span class="user-badge">ইউজার মোড</span>';
+                statusSub.textContent = '(শুধু দেখতে পারবেন)';
+                document.getElementById('loginBtn').style.display = 'inline-block';
+                document.getElementById('logoutBtn').style.display = 'none';
+            }
+
             // ম্যাচ অ্যাকশন বাটন সবসময় দেখাবে
             document.querySelectorAll('.match-actions .btn').forEach(btn => {
                 btn.style.display = 'inline-block';
@@ -1026,7 +1154,7 @@
             });
 
             // অন্যান্য বাটন অ্যাডমিনের জন্য
-            document.querySelectorAll('.btn:not(.match-actions .btn):not(.btn-secondary)').forEach(btn => {
+            document.querySelectorAll('.btn:not(.match-actions .btn):not(.btn-secondary):not(.btn-login):not(.btn-logout)').forEach(btn => {
                 if (isAdmin) {
                     btn.style.opacity = '1';
                     btn.style.pointerEvents = 'auto';
@@ -1046,7 +1174,7 @@
             });
 
             // ইনপুট
-            document.querySelectorAll('input:not(#loginPassword)').forEach(input => {
+            document.querySelectorAll('input:not(#loginPassword):not(#editBallIndex):not(#editBallValue)').forEach(input => {
                 if (isAdmin) {
                     input.style.opacity = '1';
                     input.style.pointerEvents = 'auto';
@@ -1082,7 +1210,7 @@
                 createBtn.style.display = isAdmin ? 'inline-block' : 'none';
             }
 
-            // এডিট বাটন দেখানো
+            // এডিট বাটন
             document.querySelectorAll('.btn-edit').forEach(btn => {
                 if (isAdmin) {
                     btn.style.display = 'inline-block';
@@ -1120,8 +1248,6 @@
         // =====================================================
         // ===== এডিট স্কোর =====
         // =====================================================
-        let editScoreCallback = null;
-
         function openEditScore() {
             if (!isAdmin) {
                 notifyError('❌ শুধু অ্যাডমিন স্কোর এডিট করতে পারেন!');
@@ -1138,7 +1264,7 @@
             document.getElementById('editScoreModal').classList.add('active');
             document.getElementById('editBallIndex').value = '';
             document.getElementById('editBallValue').value = '';
-            document.getElementById('editBallIndex').focus();
+            setTimeout(() => document.getElementById('editBallIndex').focus(), 100);
         }
 
         function closeEditScore() {
@@ -1169,12 +1295,10 @@
                 matchState.extras -= oldBall.runs;
                 matchState.totalRuns -= oldBall.runs;
                 if (oldBall.extraType === 'NB' || oldBall.extraType === 'WD') {
-                    // নো বল বা ওয়াইড হলে বল কাউন্ট রিভার্স
                     matchState.ballsBowled--;
                 }
             } else {
                 matchState.totalRuns -= oldBall.runs;
-                // বল কাউন্ট রিভার্স (এক্সট্রা ছাড়া সব বল কাউন্ট হয়)
                 matchState.ballsBowled--;
             }
 
@@ -1213,7 +1337,6 @@
                 matchState.totalRuns += num;
             }
 
-            // বল কাউন্ট (এক্সট্রা ছাড়া)
             if (!newBall.isExtra || value === 'NB') {
                 matchState.ballsBowled++;
             }
@@ -1787,7 +1910,6 @@
 
         // ===== ম্যাচ ফাংশন =====
         function startCricketMatch(index) {
-            // ম্যাচ ইতিমধ্যে চলছে কিনা চেক
             if (matches[index].status === 'ongoing' || matches[index].status === 'completed') {
                 notifyInfo('এই ম্যাচ ইতিমধ্যে শুরু বা শেষ হয়েছে!');
                 return;
@@ -1805,7 +1927,6 @@
                 players: match.players
             };
 
-            // ম্যাচ স্টেট রিসেট
             matchState = {
                 tossDone: false,
                 tossWinner: null,
@@ -1826,7 +1947,6 @@
                 maxWickets: match.players || playersPerTeam
             };
 
-            // টস সেকশন রিসেট
             document.getElementById('tossResult').innerHTML = '';
             document.getElementById('tossSection').querySelector('button').disabled = false;
             
@@ -1937,7 +2057,6 @@
 
         // ===== স্কোরিং =====
         function addBall(runs) {
-            // স্কোর করার জন্য অ্যাডমিন চেক - শুধু অ্যাডমিন স্কোর করতে পারবে
             if (!isAdmin) {
                 notifyError('❌ শুধু অ্যাডমিন স্কোর করতে পারেন!');
                 return;
@@ -2247,7 +2366,6 @@
 
             container.innerHTML = html;
 
-            // কন্ট্রোল বাটন আপডেট
             document.getElementById('controlButtons').style.display =
                 matchState.isComplete || !matchState.tossDone || matchState.inningsComplete ? 'none' : 'flex';
                 
