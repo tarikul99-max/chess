@@ -1,61 +1,62 @@
+// script.js - Advanced Chess Engine
+
 const canvas = document.getElementById("chessBoard");
 const ctx = canvas.getContext("2d");
-const S = 50; // স্কয়ার সাইজ
-const pieces = { 'r':'♜','n':'♞','b':'♝','q':'♛','k':'♚','p':'♟', 'R':'♖','N':'♘','B':'♗','Q':'♕','K':'♔','P':'♙' };
+const S = 50; 
 
-let board = [
-    ['r','n','b','q','k','b','n','r'],
-    ['p','p','p','p','p','p','p','p'],
-    [null,null,null,null,null,null,null,null],
-    [null,null,null,null,null,null,null,null],
-    [null,null,null,null,null,null,null,null],
-    [null,null,null,null,null,null,null,null],
-    ['P','P','P','P','P','P','P','P'],
-    ['R','N','B','Q','K','B','N','R']
-];
+// ১. বোর্ড রিপ্রেজেন্টেশন (অবজেক্ট দিয়ে তৈরি)
+let board = Array(8).fill(null).map(() => Array(8).fill(null));
 
-let selected = null;
-let turn = 'white'; 
+function initBoard() {
+    const layout = ['r','n','b','q','k','b','n','r'];
+    for(let i=0; i<8; i++) {
+        board[0][i] = { type: layout[i], color: 'BLACK' };
+        board[1][i] = { type: 'p', color: 'BLACK' };
+        board[6][i] = { type: 'p', color: 'WHITE' };
+        board[7][i] = { type: layout[i], color: 'WHITE' };
+    }
+}
 
-// অবস্টাকল চেকিং ফাংশন
-function isPathClear(sr, sc, er, ec, board) {
-    let dr = Math.sign(er - sr);
-    let dc = Math.sign(ec - sc);
-    let r = sr + dr;
-    let c = sc + dc;
-    while (r !== er || c !== ec) {
-        if (board[r][c] !== null) return false;
-        r += dr;
-        c += dc;
+// ইউনিকোড সিম্বল ম্যাপ
+const pieceSymbols = { 'r': '♜', 'n': '♞', 'b': '♝', 'q': '♛', 'k': '♚', 'p': '♟', 'R': '♖', 'N': '♘', 'B': '♗', 'Q': '♕', 'K': '♔', 'P': '♙' };
+
+// ২. পথ বাধা চেক করার লজিক
+function isPathClear(from, to, board) {
+    let dr = Math.sign(to.r - from.r);
+    let dc = Math.sign(to.c - from.c);
+    let r = from.r + dr, c = from.c + dc;
+    while (r !== to.r || c !== to.c) {
+        if (board[r][c]) return false;
+        r += dr; c += dc;
     }
     return true;
 }
 
-// মুভমেন্টের নিয়ম (Validation Logic)
-function isValidMove(sr, sc, er, ec, piece, board) {
-    let type = piece.toLowerCase();
-    let dr = er - sr;
-    let dc = ec - sc;
-    let target = board[er][ec];
+// ৩. মুভমেন্ট ভ্যালিডেশন (Pseudo-Legal)
+function isValidMove(from, to, board) {
+    let piece = board[from.r][from.c];
+    let target = board[to.r][to.c];
+    if (!piece || (target && target.color === piece.color)) return false;
 
-    // একই রঙের পিস খাওয়া যাবে না
-    if (target && (target === target.toUpperCase()) === (piece === piece.toUpperCase())) return false;
+    let dr = to.r - from.r;
+    let dc = to.c - from.c;
 
-    if (type === 'p') {
-        let dir = (piece === 'P') ? -1 : 1;
-        if (dc === 0 && dr === dir && !target) return true;
-        if (Math.abs(dc) === 1 && dr === dir && target) return true;
-        return false;
+    switch(piece.type) {
+        case 'p':
+            let dir = (piece.color === 'WHITE') ? -1 : 1;
+            if (dc === 0 && dr === dir && !target) return true;
+            if (Math.abs(dc) === 1 && dr === dir && target) return true;
+            return false;
+        case 'n': return (Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2);
+        case 'r': return (dr === 0 || dc === 0) && isPathClear(from, to, board);
+        case 'b': return (Math.abs(dr) === Math.abs(dc)) && isPathClear(from, to, board);
+        case 'q': return (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc)) && isPathClear(from, to, board);
+        case 'k': return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
+        default: return false;
     }
-    if (type === 'n') return (Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2);
-    if (type === 'r') return (dr === 0 || dc === 0) && isPathClear(sr, sc, er, ec, board);
-    if (type === 'b') return (Math.abs(dr) === Math.abs(dc)) && isPathClear(sr, sc, er, ec, board);
-    if (type === 'q') return (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc)) && isPathClear(sr, sc, er, ec, board);
-    if (type === 'k') return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
-    return false;
 }
 
-// বোর্ড রেন্ডার করা
+// ৪. বোর্ড রেন্ডার করা
 function render() {
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
@@ -63,36 +64,36 @@ function render() {
             ctx.fillRect(c * S, r * S, S, S);
             let p = board[r][c];
             if (p) {
-                ctx.fillStyle = (p === p.toUpperCase()) ? "white" : "black";
+                ctx.fillStyle = (p.color === 'WHITE') ? "white" : "black";
                 ctx.font = "40px Arial";
                 ctx.textAlign = "center";
-                ctx.fillText(pieces[p], c * S + 25, r * S + 35);
+                // টাইপ অনুযায়ী সিম্বল বসানো
+                let symbol = p.type;
+                if(p.color === 'WHITE') symbol = symbol.toUpperCase();
+                ctx.fillText(pieceSymbols[symbol], c * S + 25, r * S + 35);
             }
         }
     }
 }
 
-// মাউস ক্লিক ইভেন্ট
+// ৫. মাউস ক্লিক হ্যান্ডলার
+let selected = null;
 canvas.addEventListener("mousedown", (e) => {
     const rect = canvas.getBoundingClientRect();
     let c = Math.floor((e.clientX - rect.left) / S);
     let r = Math.floor((e.clientY - rect.top) / S);
 
     if (selected) {
-        if (isValidMove(selected.r, selected.c, r, c, selected.piece, board)) {
-            board[r][c] = selected.piece;
+        if (isValidMove(selected, {r, c}, board)) {
+            board[r][c] = board[selected.r][selected.c];
             board[selected.r][selected.c] = null;
-            turn = (turn === 'white') ? 'black' : 'white';
-            document.getElementById("status").innerText = turn.toUpperCase() + "-এর চাল";
         }
         selected = null;
     } else if (board[r][c]) {
-        let isWhite = board[r][c] === board[r][c].toUpperCase();
-        if ((isWhite && turn === 'white') || (!isWhite && turn === 'black')) {
-            selected = { r, c, piece: board[r][c] };
-        }
+        selected = {r, c};
     }
     render();
 });
 
+initBoard();
 render();
