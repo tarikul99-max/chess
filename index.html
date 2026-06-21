@@ -1,104 +1,15 @@
 <!DOCTYPE html>
-<html>
+<html lang="bn">
 <head>
-    <title>Professional JS Chess Engine</title>
-    <style>
-        body { display: flex; flex-direction: column; align-items: center; background: #2c3e50; color: white; }
-        canvas { border: 5px solid #34495e; cursor: pointer; }
-    </style>
+    <meta charset="UTF-8">
+    <title>Chess Game</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h2>Advanced JavaScript Chess</h2>
+    <h2>JavaScript Chess</h2>
     <canvas id="chessBoard" width="400" height="400"></canvas>
     <p id="status">সাদা চাল দিন</p>
-
-    <script>
-        const canvas = document.getElementById("chessBoard");
-        const ctx = canvas.getContext("2d");
-        const S = 50; // Square size
-
-        // পিসগুলোর ডিজাইন
-        const pieces = { 'r':'♜','n':'♞','b':'♝','q':'♛','k':'♚','p':'♟', 'R':'♖','N':'♘','B':'♗','Q':'♕','K':'♔','P':'♙' };
-        
-        // বোর্ড সেটআপ
-        let board = [
-            ['r','n','b','q','k','b','n','r'],
-            ['p','p','p','p','p','p','p','p'],
-            [null,null,null,null,null,null,null,null],
-            [null,null,null,null,null,null,null,null],
-            [null,null,null,null,null,null,null,null],
-            [null,null,null,null,null,null,null,null],
-            ['P','P','P','P','P','P','P','P'],
-            ['R','N','B','Q','K','B','N','R']
-        ];
-
-        let selected = null;
-
-        // --- মুভমেন্ট লজিক ইঞ্জিন ---
-        function isValid(sr, sc, er, ec, piece) {
-            let p = piece.toLowerCase();
-            let dr = er - sr, dc = ec - sc;
-
-            if (p === 'p') { // পনের মুভমেন্ট
-                return (dc === 0 && (er - sr === (piece === 'P' ? -1 : 1)));
-            }
-            if (p === 'n') { // ঘোড়ার মুভমেন্ট
-                return (Math.abs(dr) === 2 && Math.abs(dc) === 1) || (Math.abs(dr) === 1 && Math.abs(dc) === 2);
-            }
-            if (p === 'r') { // রুকের মুভমেন্ট
-                return dr === 0 || dc === 0;
-            }
-            if (p === 'b') { // হাতির মুভমেন্ট
-                return Math.abs(dr) === Math.abs(dc);
-            }
-            if (p === 'q') { // কুইন মুভমেন্ট
-                return dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc);
-            }
-            if (p === 'k') { // রাজার মুভমেন্ট
-                return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;
-            }
-            return true;
-        }
-
-        // ড্রয়িং ফাংশন
-        function render() {
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    ctx.fillStyle = (r + c) % 2 === 0 ? "#f0d9b5" : "#b58863";
-                    ctx.fillRect(c * S, r * S, S, S);
-                    let p = board[r][c];
-                    if (p) {
-                        ctx.fillStyle = (p === p.toUpperCase()) ? "white" : "black";
-                        ctx.font = "40px Arial";
-                        ctx.textAlign = "center";
-                        ctx.fillText(pieces[p], c * S + 25, r * S + 35);
-                    }
-                }
-            }
-        }
-
-        canvas.addEventListener("mousedown", (e) => {
-            const rect = canvas.getBoundingClientRect();
-            let c = Math.floor((e.clientX - rect.left) / S);
-            let r = Math.floor((e.clientY - rect.top) / S);
-
-            if (selected) {
-                if (isValid(selected.r, selected.c, r, c, selected.piece)) {
-                    board[r][c] = selected.piece;
-                    board[selected.r][selected.c] = null;
-                    document.getElementById("status").innerText = "চাল সফল!";
-                } else {
-                    document.getElementById("status").innerText = "অবৈধ চাল!";
-                }
-                selected = null;
-            } else if (board[r][c]) {
-                selected = { r, c, piece: board[r][c] };
-                document.getElementById("status").innerText = "গুটি সিলেক্টেড";
-            }
-            render();
-        });
-
-        render();
-    </script>
+    
+    <script src="script.js"></script>
 </body>
 </html>
