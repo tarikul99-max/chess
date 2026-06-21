@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🏏 ক্রিকেট টুর্নামেন্ট</title>
+    <title>🏏 ক্রিকেট টুর্নামেন্ট - গ্রুপ স্টেজ</title>
     
-    <!-- Firebase Compat SDK (সব ব্রাউজারে কাজ করে) -->
+    <!-- Firebase Compat SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
     <script>
@@ -33,7 +33,7 @@
             min-height: 100vh;
             padding: 20px;
         }
-        .container { max-width: 1200px; margin: 0 auto; }
+        .container { max-width: 1400px; margin: 0 auto; }
 
         .notification {
             background: rgba(0,0,0,0.9);
@@ -41,10 +41,16 @@
             margin: 10px 0;
             border-radius: 10px;
             border-left: 4px solid #00b894;
+            animation: slideIn 0.3s ease;
         }
         .notification.success { border-left-color: #00b894; }
         .notification.error { border-left-color: #f45c43; }
         .notification.info { border-left-color: #00cec9; }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
 
         .admin-bar {
             background: rgba(255,255,255,0.05);
@@ -72,15 +78,15 @@
         }
 
         .btn {
-            padding: 12px 30px;
+            padding: 10px 25px;
             border: none;
             border-radius: 10px;
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s;
             text-transform: uppercase;
-            letter-spacing: 1px;
+            letter-spacing: 0.5px;
         }
         .btn-primary { background: linear-gradient(45deg, #00b894, #00cec9); color: #1a1a2e; }
         .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(0,206,201,0.3); }
@@ -89,8 +95,9 @@
         .btn-danger { background: linear-gradient(45deg, #eb3349, #f45c43); color: white; }
         .btn-danger:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(235,51,73,0.3); }
         .btn-secondary { background: rgba(255,255,255,0.1); color: white; border: 2px solid rgba(255,255,255,0.2); }
-        .btn-sm { padding: 6px 15px; font-size: 12px; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-secondary:hover { background: rgba(255,255,255,0.2); }
+        .btn-sm { padding: 5px 12px; font-size: 12px; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
 
         .header {
             text-align: center;
@@ -107,7 +114,7 @@
             padding: 30px;
             margin-bottom: 30px;
         }
-        .setup-section h2 { margin-bottom: 20px; font-weight: 300; }
+        .setup-section h2 { margin-bottom: 20px; font-weight: 300; letter-spacing: 2px; }
 
         .input-group {
             display: flex;
@@ -159,6 +166,7 @@
             color: white;
             font-size: 15px;
         }
+        .setup-options select option { background: #1a1a3e; }
 
         .teams-grid {
             display: grid;
@@ -247,6 +255,18 @@
             padding-bottom: 10px;
             border-bottom: 1px solid rgba(255,255,255,0.1);
         }
+        .match-card .match-round { font-size: 14px; opacity: 0.6; }
+        .match-card .match-status {
+            font-size: 14px;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: rgba(0,206,201,0.2);
+            color: #00cec9;
+        }
+        .match-card .match-status.completed {
+            background: rgba(0,184,148,0.2);
+            color: #00b894;
+        }
         .match-card .match-teams {
             display: flex;
             justify-content: space-between;
@@ -262,7 +282,20 @@
             flex: 1;
             text-align: center;
         }
-        .match-card .vs { padding: 0 15px; opacity: 0.4; }
+        .match-card .team.winner {
+            background: rgba(0,184,148,0.2);
+            border: 2px solid #00b894;
+        }
+        .match-card .vs { padding: 0 15px; opacity: 0.4; font-weight: 300; }
+        .match-card .match-score {
+            text-align: center;
+            font-size: 14px;
+            opacity: 0.8;
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 8px;
+        }
         .match-card .match-actions {
             display: flex;
             gap: 10px;
@@ -323,6 +356,7 @@
             text-align: center;
         }
         .login-box h2 { font-weight: 300; color: #00b894; }
+        .login-box .subtitle { opacity: 0.5; font-size: 14px; margin-bottom: 25px; }
         .login-box input {
             width: 100%;
             padding: 14px 20px;
@@ -358,11 +392,112 @@
         }
         .login-box .close-modal:hover { color: white; }
 
+        /* স্কোরবোর্ড মডাল */
+        .scoreboard-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        .scoreboard-modal.active { display: flex; }
+        .scoreboard-box {
+            background: rgba(30,30,60,0.95);
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 700px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .scoreboard-box .close-btn {
+            float: right;
+            background: rgba(235,51,73,0.3);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .scoreboard-box .close-btn:hover { background: rgba(235,51,73,0.8); }
+        .scoreboard-box h2 { text-align: center; font-weight: 300; margin-bottom: 20px; }
+
+        .innings-box {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #00b894;
+        }
+        .score-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .score-item {
+            background: rgba(255,255,255,0.05);
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .score-item .label { font-size: 12px; opacity: 0.5; }
+        .score-item .value { font-size: 24px; font-weight: 700; margin-top: 5px; }
+        .score-item .value.runs { color: #00b894; }
+        .score-item .value.wickets { color: #f45c43; }
+        .score-item .value.overs { color: #ffd200; }
+
+        .ball-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 20px 0;
+        }
+        .ball-buttons .btn { min-width: 50px; padding: 8px 15px; }
+
+        .toss-section {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            margin: 15px 0;
+        }
+
+        .points-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            margin: 15px 0;
+        }
+        .points-table th, .points-table td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .points-table th {
+            background: rgba(0,184,148,0.2);
+            font-weight: 600;
+        }
+        .points-table .rank-1 { background: rgba(255,215,0,0.1); }
+        .points-table .rank-2 { background: rgba(192,192,192,0.05); }
+
         @media (max-width: 768px) {
             .header h1 { font-size: 2em; }
             .match-grid { grid-template-columns: 1fr; }
             .input-group { flex-direction: column; }
             .input-group input { min-width: 100%; }
+            .score-grid { grid-template-columns: repeat(3, 1fr); }
+            .teams-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -376,11 +511,44 @@
             <div class="login-box">
                 <button class="close-modal" onclick="closeLoginModal()">✕</button>
                 <h2>🔐 অ্যাডমিন লগইন</h2>
-                <p style="opacity:0.5; margin-bottom:25px;">টিম ম্যানেজ করতে লগইন করুন</p>
+                <p class="subtitle">টিম ম্যানেজ করতে লগইন করুন</p>
                 <input type="password" id="loginPassword" placeholder="পাসওয়ার্ড দিন" />
                 <button class="btn-login-submit" onclick="loginAdmin()">🔑 লগইন করুন</button>
                 <div class="error-msg" id="loginError">❌ ভুল পাসওয়ার্ড!</div>
                 <div class="hint">ডিফল্ট পাসওয়ার্ড: <strong>admin123</strong></div>
+            </div>
+        </div>
+
+        <!-- স্কোরবোর্ড মডাল -->
+        <div class="scoreboard-modal" id="scoreboardModal">
+            <div class="scoreboard-box">
+                <button class="close-btn" onclick="closeScoreboard()">✕</button>
+                <h2 id="scoreboardTitle">🏏 ম্যাচ চলছে</h2>
+                <div id="matchTitle" style="text-align:center;opacity:0.6;margin-bottom:15px;"></div>
+
+                <div id="tossSection" class="toss-section">
+                    <button class="btn btn-primary" onclick="doToss()" id="tossBtn">🪙 টস করুন</button>
+                    <div id="tossResult" style="margin-top:15px;font-size:1.1em;"></div>
+                </div>
+
+                <div id="inningsContainer"></div>
+
+                <div class="ball-buttons" id="ballButtons">
+                    <button class="btn btn-secondary" onclick="addBall(0)">0</button>
+                    <button class="btn btn-secondary" onclick="addBall(1)">1</button>
+                    <button class="btn btn-secondary" onclick="addBall(2)">2</button>
+                    <button class="btn btn-secondary" onclick="addBall(3)">3</button>
+                    <button class="btn btn-success" onclick="addBall(4)">4</button>
+                    <button class="btn btn-success" onclick="addBall(6)">6</button>
+                    <button class="btn btn-danger" onclick="addBall('W')">W</button>
+                    <button class="btn btn-secondary" onclick="addBall('WD')">WD</button>
+                    <button class="btn btn-secondary" onclick="addBall('NB')">NB</button>
+                </div>
+
+                <div style="text-align:center;margin-top:15px;">
+                    <button class="btn btn-primary" onclick="endInnings()" id="endInningsBtn">🏏 ইনিংস শেষ</button>
+                    <button class="btn btn-danger" onclick="resignMatch()">🏳️ ম্যাচ ছেড়ে দিন</button>
+                </div>
             </div>
         </div>
 
@@ -393,12 +561,13 @@
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
                 <button class="btn btn-secondary" id="loginBtn" onclick="showLoginModal()">🔑 অ্যাডমিন লগইন</button>
                 <button class="btn btn-danger" id="logoutBtn" style="display:none;" onclick="logoutAdmin()">🚪 লগআউট</button>
+                <button class="btn btn-secondary" onclick="showPointsTable()">📊 পয়েন্ট</button>
             </div>
         </div>
 
         <div class="header">
             <h1>🏏 ক্রিকেট টুর্নামেন্ট</h1>
-            <p>টিম তৈরি করুন, প্লেয়ার যোগ করুন, ম্যাচ খেলুন!</p>
+            <p>গ্রুপ স্টেজ - প্রতিটি টিম সব টিমের সাথে খেলবে</p>
         </div>
 
         <!-- টুর্নামেন্ট লিস্ট -->
@@ -415,7 +584,7 @@
             <h2>🏆 টুর্নামেন্ট সেটআপ</h2>
             
             <div class="input-group">
-                <input type="text" id="tournamentNameInput" placeholder="টুর্নামেন্টের নাম (যেমন: প্রিমিয়ার লিগ ২০২৪)" />
+                <input type="text" id="tournamentNameInput" placeholder="টুর্নামেন্টের নাম" />
                 <button class="btn btn-danger" onclick="hideCreateTournament()">✕ বন্ধ করুন</button>
             </div>
 
@@ -429,13 +598,12 @@
                     <option value="10">১০ ওভার</option>
                     <option value="20">২০ ওভার</option>
                 </select>
-                <label>👥 প্রতি টিমে প্লেয়ার:</label>
+                <label>👥 প্লেয়ার:</label>
                 <input type="number" id="playerCountInput" value="5" min="2" max="15" />
-                <span style="opacity:0.5;font-size:13px;">(২-১৫ জন)</span>
             </div>
 
             <div class="input-group">
-                <input type="text" id="teamNameInput" placeholder="টিমের নাম লিখুন" />
+                <input type="text" id="teamNameInput" placeholder="টিমের নাম" />
                 <button class="btn btn-primary" onclick="addTeam()">➕ টিম যোগ করুন</button>
                 <button class="btn btn-success" onclick="saveTournament()" id="saveBtn" disabled>
                     💾 টুর্নামেন্ট সেভ করুন
@@ -445,7 +613,7 @@
 
             <div id="teamsList" class="teams-grid"></div>
             <div style="margin-top:15px;opacity:0.6;font-size:14px;">
-                কমপক্ষে <strong>৪</strong> টি টিম প্রয়োজন (জোড় সংখ্যা) | 
+                কমপক্ষে <strong>৪</strong> টি টিম প্রয়োজন | 
                 প্রতি টিমে <strong id="playerCountDisplay">৫</strong> জন প্লেয়ার
             </div>
         </div>
@@ -453,12 +621,11 @@
         <!-- টুর্নামেন্ট ব্র্যাকেট -->
         <div class="tournament-section" id="tournamentSection">
             <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:15px;">
-                <h2>🎯 টুর্নামেন্ট ব্র্যাকেট</h2>
-                <span style="opacity:0.6;" id="roundInfo">রাউন্ড: ১</span>
+                <h2>🎯 গ্রুপ স্টেজ - ম্যাচসমূহ</h2>
+                <span style="opacity:0.6;" id="matchCount">মোট ম্যাচ: ০</span>
             </div>
             <div id="matchesContainer" class="match-grid"></div>
             <div style="margin-top:30px;text-align:center;">
-                <button class="btn btn-primary" onclick="nextRound()">➡️ পরবর্তী রাউন্ড</button>
                 <button class="btn btn-danger" onclick="endTournament()">⏹️ টুর্নামেন্ট শেষ করুন</button>
             </div>
         </div>
@@ -474,7 +641,7 @@
             div.className = `notification ${type}`;
             div.innerHTML = `<span>${message}</span>`;
             container.appendChild(div);
-            setTimeout(() => div.remove(), 4000);
+            setTimeout(() => div.remove(), 5000);
         }
         function notifySuccess(msg) { showNotification(msg, 'success'); }
         function notifyError(msg) { showNotification(msg, 'error'); }
@@ -525,12 +692,24 @@
                 document.getElementById('loginBtn').style.display = 'inline-block';
                 document.getElementById('logoutBtn').style.display = 'none';
             }
+            // সব বাটন আপডেট
+            document.querySelectorAll('.btn:not(.btn-secondary):not(#loginBtn):not(#logoutBtn)').forEach(btn => {
+                if (isAdmin) {
+                    btn.style.opacity = '1';
+                    btn.style.pointerEvents = 'auto';
+                    btn.style.cursor = 'pointer';
+                } else {
+                    btn.style.opacity = '0.5';
+                    btn.style.pointerEvents = 'none';
+                    btn.style.cursor = 'not-allowed';
+                }
+            });
+            document.querySelectorAll('.btn-secondary').forEach(btn => {
+                btn.style.opacity = '1';
+                btn.style.pointerEvents = 'auto';
+                btn.style.cursor = 'pointer';
+            });
         }
-
-        // =====================================================
-        // ===== ফায়ারবেস =====
-        // =====================================================
-        // db ইতিমধ্যে ডিফাইন করা আছে (উপরে)
 
         // =====================================================
         // ===== টুর্নামেন্ট ডাটা =====
@@ -539,7 +718,26 @@
         let playersPerTeam = 5;
         let maxOvers = 2;
         let matches = [];
-        let currentRound = 0;
+        let matchResults = [];
+        let currentMatchIndex = -1;
+
+        // ম্যাচ স্টেট
+        let matchState = {
+            tossDone: false,
+            tossWinner: null,
+            battingTeam: null,
+            bowlingTeam: null,
+            totalRuns: 0,
+            wickets: 0,
+            ballsBowled: 0,
+            extras: 0,
+            balls: [],
+            isComplete: false,
+            inningsComplete: false,
+            firstInningsScore: null,
+            currentInnings: 0,
+            maxWickets: 5
+        };
 
         // =====================================================
         // ===== টিম ম্যানেজমেন্ট =====
@@ -628,36 +826,523 @@
         function updateStartButton() {
             const btn = document.getElementById('saveBtn');
             const allHavePlayers = teams.every(t => t.players.length === playersPerTeam);
-            const validTeams = teams.length >= 4 && teams.length % 2 === 0;
+            const validTeams = teams.length >= 4;
             btn.disabled = !(validTeams && allHavePlayers);
         }
 
         // =====================================================
-        // ===== সেভ টুর্নামেন্ট (মেইন ফাংশন) =====
+        // ===== গ্রুপ স্টেজ ম্যাচ জেনারেট =====
         // =====================================================
-        async function saveTournament() {
-            console.log('🔵 saveTournament() কল হয়েছে');
-            
+        function generateGroupStage() {
+            matches = [];
+            for (let i = 0; i < teams.length; i++) {
+                for (let j = i + 1; j < teams.length; j++) {
+                    matches.push({
+                        team1: teams[i].name,
+                        team2: teams[j].name,
+                        status: 'pending',
+                        winner: null,
+                        score: null,
+                        matchState: null
+                    });
+                }
+            }
+            document.getElementById('matchCount').textContent = `মোট ম্যাচ: ${matches.length}`;
+            renderMatches();
+            notifyInfo(`📢 ${matches.length} টি ম্যাচ তৈরি হয়েছে!`);
+        }
+
+        function renderMatches() {
+            const container = document.getElementById('matchesContainer');
+            if (matches.length === 0) {
+                container.innerHTML = '<div style="opacity:0.4;padding:40px;text-align:center;">কোনো ম্যাচ নেই</div>';
+                return;
+            }
+            container.innerHTML = matches.map((match, idx) => {
+                let actionHtml = '';
+                if (match.status === 'pending') {
+                    actionHtml = `<button class="btn btn-success" onclick="startMatch(${idx})">🎮 খেলা শুরু</button>`;
+                } else if (match.status === 'ongoing') {
+                    actionHtml = `<button class="btn btn-primary" onclick="resumeMatch(${idx})">▶️ চালিয়ে যান</button>`;
+                } else {
+                    actionHtml = `<span style="opacity:0.4;">✅ সম্পূর্ণ</span>`;
+                }
+
+                return `
+                    <div class="match-card">
+                        <div class="match-header">
+                            <span class="match-round">🏏 গ্রুপ স্টেজ</span>
+                            <span class="match-status ${match.status === 'completed' ? 'completed' : ''}">
+                                ${match.status === 'pending' ? '⏳ অপেক্ষমান' : 
+                                  match.status === 'ongoing' ? '🎮 চলছে' : '✅ শেষ'}
+                            </span>
+                        </div>
+                        <div class="match-teams">
+                            <div class="team ${match.winner === match.team1 ? 'winner' : ''}">
+                                🏏 ${match.team1}
+                            </div>
+                            <div class="vs">VS</div>
+                            <div class="team ${match.winner === match.team2 ? 'winner' : ''}">
+                                🏏 ${match.team2}
+                            </div>
+                        </div>
+                        ${match.score ? `<div class="match-score">${match.score}</div>` : ''}
+                        <div class="match-actions">
+                            ${actionHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            updateAdminUI();
+        }
+
+        // =====================================================
+        // ===== ম্যাচ কন্ট্রোল =====
+        // =====================================================
+        function startMatch(index) {
+            if (matches[index].status === 'ongoing' || matches[index].status === 'completed') {
+                notifyInfo('ম্যাচ ইতিমধ্যে শুরু বা শেষ!');
+                return;
+            }
+            currentMatchIndex = index;
+            matches[index].status = 'ongoing';
+
+            matchState = {
+                tossDone: false,
+                tossWinner: null,
+                battingTeam: null,
+                bowlingTeam: null,
+                totalRuns: 0,
+                wickets: 0,
+                ballsBowled: 0,
+                extras: 0,
+                balls: [],
+                isComplete: false,
+                inningsComplete: false,
+                firstInningsScore: null,
+                currentInnings: 0,
+                maxWickets: playersPerTeam
+            };
+
+            document.getElementById('tossResult').innerHTML = '';
+            document.getElementById('tossBtn').disabled = false;
+            openScoreboard(matches[index].team1, matches[index].team2);
+            renderScoreboard();
+            notifyInfo(`🎮 ${matches[index].team1} vs ${matches[index].team2} শুরু!`);
+        }
+
+        function resumeMatch(index) {
+            currentMatchIndex = index;
+            const match = matches[index];
+            if (match.matchState) {
+                matchState = JSON.parse(match.matchState);
+                if (matchState.tossDone) {
+                    document.getElementById('tossBtn').disabled = true;
+                }
+            }
+            openScoreboard(match.team1, match.team2);
+            renderScoreboard();
+            notifyInfo('▶️ ম্যাচ চালিয়ে যান');
+        }
+
+        function openScoreboard(team1, team2) {
+            document.getElementById('scoreboardModal').classList.add('active');
+            document.getElementById('scoreboardTitle').textContent = `🏏 ${team1} vs ${team2}`;
+            document.getElementById('matchTitle').textContent = `গ্রুপ স্টেজ ম্যাচ`;
+        }
+
+        function closeScoreboard() {
+            document.getElementById('scoreboardModal').classList.remove('active');
+            if (currentMatchIndex >= 0 && matches[currentMatchIndex]) {
+                matches[currentMatchIndex].matchState = JSON.stringify(matchState);
+                if (!matchState.isComplete && matchState.tossDone) {
+                    matches[currentMatchIndex].status = 'ongoing';
+                }
+                renderMatches();
+                saveTournamentData();
+            }
+        }
+
+        // =====================================================
+        // ===== টস =====
+        // =====================================================
+        function doToss() {
+            if (matchState.tossDone) {
+                notifyInfo('টস হয়ে গেছে!');
+                return;
+            }
+
+            const match = matches[currentMatchIndex];
+            const tossWinner = Math.random() > 0.5 ? match.team1 : match.team2;
+            const choices = ['bat', 'bowl'];
+            const tossChoice = choices[Math.floor(Math.random() * 2)];
+
+            matchState.tossDone = true;
+            matchState.tossWinner = tossWinner;
+
+            matchState.battingTeam = tossChoice === 'bat' ? tossWinner :
+                tossWinner === match.team1 ? match.team2 : match.team1;
+            matchState.bowlingTeam = tossChoice === 'bowl' ? tossWinner :
+                tossWinner === match.team1 ? match.team2 : match.team1;
+
+            document.getElementById('tossResult').innerHTML = `
+                🪙 টস জিতেছে: <strong>${tossWinner}</strong><br>
+                সিদ্ধান্ত: <strong>${tossChoice === 'bat' ? 'ব্যাটিং' : 'বোলিং'}</strong><br>
+                🏏 ব্যাটিং: <strong>${matchState.battingTeam}</strong> | 
+                🎯 বোলিং: <strong>${matchState.bowlingTeam}</strong>
+            `;
+
+            document.getElementById('tossBtn').disabled = true;
+            renderScoreboard();
+            notifySuccess(`🪙 ${tossWinner} টস জিতেছে!`);
+            saveTournamentData();
+        }
+
+        // =====================================================
+        // ===== স্কোরিং =====
+        // =====================================================
+        function addBall(runs) {
             if (!isAdmin) {
                 notifyError('❌ অ্যাডমিন লগইন করুন!');
                 return;
             }
-
-            const name = document.getElementById('tournamentNameInput').value.trim();
-            if (!name) {
-                notifyError('❌ টুর্নামেন্টের নাম দিন!');
+            if (matchState.isComplete) {
+                notifyError('ম্যাচ শেষ!');
+                return;
+            }
+            if (!matchState.tossDone) {
+                notifyError('টস করুন!');
+                return;
+            }
+            if (matchState.inningsComplete) {
+                notifyError('ইনিংস শেষ!');
                 return;
             }
 
-            console.log('📝 নাম:', name);
-            console.log('👥 টিম:', teams.length);
+            const ball = { runs, isWicket: false, isExtra: false, extraType: null };
+
+            if (runs === 'WD' || runs === 'NB') {
+                ball.isExtra = true;
+                ball.extraType = runs;
+                ball.runs = 1;
+                matchState.extras += 1;
+                matchState.totalRuns += 1;
+            } else if (runs === 'W') {
+                ball.isWicket = true;
+                matchState.wickets++;
+                if (matchState.wickets >= matchState.maxWickets) {
+                    notifyInfo(`💀 ${matchState.maxWickets} উইকেট!`);
+                    endInnings();
+                    return;
+                }
+            } else {
+                matchState.totalRuns += runs;
+            }
+
+            if (!ball.isExtra || runs === 'NB') {
+                matchState.ballsBowled++;
+            }
+
+            matchState.balls.push(ball);
+
+            const maxBalls = maxOvers * 6;
+            if (matchState.ballsBowled >= maxBalls) {
+                notifyInfo(`⏰ ${maxOvers} ওভার সম্পূর্ণ!`);
+                endInnings();
+                return;
+            }
+
+            renderScoreboard();
+            saveTournamentData();
+        }
+
+        function endInnings() {
+            if (!isAdmin) {
+                notifyError('❌ অ্যাডমিন লগইন করুন!');
+                return;
+            }
+            if (matchState.inningsComplete) {
+                notifyInfo('ইনিংস শেষ!');
+                return;
+            }
+
+            matchState.inningsComplete = true;
+
+            if (matchState.currentInnings === 0) {
+                matchState.firstInningsScore = {
+                    runs: matchState.totalRuns,
+                    wickets: matchState.wickets,
+                    balls: matchState.ballsBowled,
+                    extras: matchState.extras
+                };
+
+                notifyInfo(`📢 প্রথম ইনিংস শেষ! ${matchState.totalRuns}/${matchState.wickets}`);
+
+                matchState.currentInnings = 1;
+                matchState.inningsComplete = false;
+                matchState.totalRuns = 0;
+                matchState.wickets = 0;
+                matchState.ballsBowled = 0;
+                matchState.extras = 0;
+                matchState.balls = [];
+
+                const temp = matchState.battingTeam;
+                matchState.battingTeam = matchState.bowlingTeam;
+                matchState.bowlingTeam = temp;
+
+                renderScoreboard();
+                notifyInfo(`🎯 দ্বিতীয় ইনিংস শুরু!`);
+                saveTournamentData();
+                return;
+            }
+
+            // দ্বিতীয় ইনিংস শেষ
+            matchState.isComplete = true;
+            matchState.inningsComplete = true;
+
+            const firstScore = matchState.firstInningsScore;
+            const secondScore = {
+                runs: matchState.totalRuns,
+                wickets: matchState.wickets
+            };
+
+            let winner = null;
+            let scoreText = '';
+
+            if (firstScore.runs > secondScore.runs) {
+                winner = matchState.bowlingTeam;
+                scoreText = `${winner} ${firstScore.runs - secondScore.runs} রানে জিতেছে!`;
+                notifySuccess(`🏆 ${winner} জিতেছে!`);
+            } else if (secondScore.runs > firstScore.runs) {
+                winner = matchState.battingTeam;
+                const wicketsLeft = matchState.maxWickets - secondScore.wickets;
+                scoreText = `${winner} ${wicketsLeft} উইকেটে জিতেছে!`;
+                notifySuccess(`🏆 ${winner} জিতেছে!`);
+            } else {
+                scoreText = `ম্যাচ ড্র!`;
+                notifyInfo('🤝 ড্র!');
+            }
+
+            const match = matches[currentMatchIndex];
+            match.status = 'completed';
+            match.winner = winner;
+            match.score = scoreText;
+
+            matchResults.push({
+                team1: match.team1,
+                team2: match.team2,
+                winner: winner,
+                score: scoreText
+            });
+
+            renderMatches();
+            renderScoreboard();
+            saveTournamentData();
+
+            setTimeout(() => {
+                closeScoreboard();
+                notifyInfo('✅ ম্যাচ শেষ!');
+            }, 3000);
+        }
+
+        function resignMatch() {
+            if (!isAdmin) {
+                notifyError('❌ অ্যাডমিন লগইন করুন!');
+                return;
+            }
+            if (matchState.isComplete) return;
+
+            matchState.isComplete = true;
+            const loser = matchState.battingTeam || matches[currentMatchIndex].team1;
+            const winner = matchState.bowlingTeam || matches[currentMatchIndex].team2;
+            const match = matches[currentMatchIndex];
+            match.status = 'completed';
+            match.winner = winner;
+            match.score = `${winner} ডিফল্টে জিতেছে!`;
+            matchResults.push({
+                team1: match.team1,
+                team2: match.team2,
+                winner: winner,
+                score: match.score
+            });
+            renderMatches();
+            closeScoreboard();
+            notifyInfo(`🏳️ ${loser} ম্যাচ ছেড়ে দিয়েছে!`);
+            saveTournamentData();
+        }
+
+        // =====================================================
+        // ===== স্কোরবোর্ড রেন্ডার =====
+        // =====================================================
+        function renderScoreboard() {
+            const container = document.getElementById('inningsContainer');
+
+            if (!matchState.tossDone) {
+                container.innerHTML = `<div style="text-align:center;padding:40px;opacity:0.6;">🪙 টস করার জন্য অপেক্ষা করুন</div>`;
+                return;
+            }
+
+            let html = '';
+            const maxBalls = maxOvers * 6;
+            const maxWickets = matchState.maxWickets || playersPerTeam;
+
+            if (matchState.firstInningsScore) {
+                const s = matchState.firstInningsScore;
+                html += `
+                    <div class="innings-box">
+                        <div class="innings-header">
+                            <span>🏏 ইনিংস ১</span>
+                            <span style="color:#00b894;">${matchState.bowlingTeam} (ব্যাটিং)</span>
+                        </div>
+                        <div class="score-grid">
+                            <div class="score-item"><div class="label">রান</div><div class="value runs">${s.runs}</div></div>
+                            <div class="score-item"><div class="label">উইকেট</div><div class="value wickets">${s.wickets}/${maxWickets}</div></div>
+                            <div class="score-item"><div class="label">ওভার</div><div class="value overs">${Math.floor(s.balls/6)}.${s.balls%6}</div></div>
+                            <div class="score-item"><div class="label">এক্সট্রা</div><div class="value extra">${s.extras}</div></div>
+                            <div class="score-item"><div class="label">রান রেট</div><div class="value" style="color:#ffd200;">${(s.runs/(s.balls/6)).toFixed(2)}</div></div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            html += `
+                <div class="innings-box" style="border-left-color: ${matchState.currentInnings === 0 ? '#ffd200' : '#f45c43'};">
+                    <div class="innings-header">
+                        <span>🏏 ইনিংস ${matchState.currentInnings + 1}</span>
+                        <span style="color: ${matchState.currentInnings === 0 ? '#ffd200' : '#f45c43'};">
+                            ${matchState.battingTeam} (ব্যাটিং)
+                        </span>
+                    </div>
+                    <div class="score-grid">
+                        <div class="score-item"><div class="label">রান</div><div class="value runs">${matchState.totalRuns}</div></div>
+                        <div class="score-item"><div class="label">উইকেট</div><div class="value wickets">${matchState.wickets}/${maxWickets}</div></div>
+                        <div class="score-item"><div class="label">ওভার</div><div class="value overs">${Math.floor(matchState.ballsBowled/6)}.${matchState.ballsBowled%6}</div></div>
+                        <div class="score-item"><div class="label">এক্সট্রা</div><div class="value extra">${matchState.extras}</div></div>
+                        <div class="score-item"><div class="label">রান রেট</div><div class="value" style="color:#ffd200;">${matchState.ballsBowled > 0 ? (matchState.totalRuns/(matchState.ballsBowled/6)).toFixed(2) : '0.00'}</div></div>
+                    </div>
+                    <div style="text-align:center;padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;margin:10px 0;">
+                        🎯 বোলিং: ${matchState.bowlingTeam} | বাকি: ${maxBalls - matchState.ballsBowled} বল
+                    </div>
+                </div>
+            `;
+
+            if (matchState.balls.length > 0) {
+                html += `
+                    <div style="padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;max-height:100px;overflow-y:auto;">
+                        ${matchState.balls.map(ball => {
+                            let cls = 'ball';
+                            let label = ball.runs;
+                            if (ball.isWicket) { cls = 'ball wicket'; label = 'W'; }
+                            else if (ball.isExtra) { cls = 'ball extra'; label = ball.extraType || ball.runs; }
+                            else { cls = `ball runs-${ball.runs}`; }
+                            return `<span style="display:inline-block;padding:2px 8px;margin:2px;border-radius:4px;font-size:14px;font-weight:600;${cls.includes('wicket') ? 'background:rgba(235,51,73,0.5);color:#ff6b6b;' : cls.includes('extra') ? 'background:rgba(247,151,30,0.3);color:#ffd200;' : `background:rgba(0,184,148,${ball.runs/6});color:#00b894;`}">${label}</span>`;
+                        }).join('')}
+                    </div>
+                `;
+            }
+
+            if (matchState.firstInningsScore && matchState.currentInnings === 1 && !matchState.isComplete) {
+                const target = matchState.firstInningsScore.runs + 1;
+                html += `
+                    <div style="text-align:center;padding:15px;background:rgba(247,151,30,0.2);border-radius:8px;margin-top:15px;">
+                        🎯 লক্ষ্য: <strong style="color:#ffd200;">${target}</strong> রান 
+                        (প্রয়োজন ${target - matchState.totalRuns} রান, বাকি ${maxWickets - matchState.wickets} উইকেট)
+                    </div>
+                `;
+            }
+
+            if (matchState.isComplete) {
+                const match = matches[currentMatchIndex];
+                html += `
+                    <div style="text-align:center;padding:20px;background:rgba(0,184,148,0.2);border-radius:12px;margin-top:15px;border:2px solid #00b894;">
+                        <h3 style="color:#00b894;">🏆 ম্যাচ শেষ!</h3>
+                        <p style="font-size:1.2em;margin-top:10px;">${match.score}</p>
+                        ${match.winner ? `<p style="margin-top:10px;">🎉 বিজয়ী: <strong>${match.winner}</strong></p>` : ''}
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+
+            document.getElementById('ballButtons').style.display =
+                matchState.isComplete || !matchState.tossDone || matchState.inningsComplete ? 'none' : 'flex';
+            document.getElementById('endInningsBtn').style.display =
+                matchState.isComplete || !matchState.tossDone ? 'none' : 'inline-block';
+        }
+
+        // =====================================================
+        // ===== পয়েন্ট টেবিল =====
+        // =====================================================
+        function showPointsTable() {
+            const points = {};
+            teams.forEach(t => points[t.name] = { wins: 0, losses: 0, draws: 0, points: 0 });
+
+            matchResults.forEach(r => {
+                if (r.winner) {
+                    points[r.winner].wins++;
+                    points[r.winner].points += 3;
+                    const loser = r.team1 === r.winner ? r.team2 : r.team1;
+                    if (points[loser]) {
+                        points[loser].losses++;
+                    }
+                } else {
+                    if (points[r.team1]) points[r.team1].draws++;
+                    if (points[r.team2]) points[r.team2].draws++;
+                    if (points[r.team1]) points[r.team1].points += 1;
+                    if (points[r.team2]) points[r.team2].points += 1;
+                }
+            });
+
+            const sorted = Object.keys(points).sort((a, b) => points[b].points - points[a].points);
+
+            let html = `
+                <div style="background:rgba(0,0,0,0.8);border-radius:15px;padding:25px;margin:20px 0;max-height:500px;overflow-y:auto;">
+                    <h3 style="text-align:center;margin-bottom:20px;">📊 পয়েন্ট তালিকা</h3>
+                    <table class="points-table">
+                        <thead><tr>
+                            <th>#</th><th>টিম</th><th>ম্যাচ</th><th>জয়</th><th>ড্র</th><th>হার</th><th>পয়েন্ট</th>
+                        </tr></thead>
+                        <tbody>
+            `;
+
+            sorted.forEach((team, i) => {
+                const total = (points[team].wins || 0) + (points[team].draws || 0) + (points[team].losses || 0);
+                html += `
+                    <tr class="${i === 0 ? 'rank-1' : i === 1 ? 'rank-2' : ''}">
+                        <td><strong>${i + 1}</strong></td>
+                        <td>🏏 ${team}</td>
+                        <td>${total}</td>
+                        <td style="color:#00b894;">${points[team].wins || 0}</td>
+                        <td style="color:#ffd200;">${points[team].draws || 0}</td>
+                        <td style="color:#f45c43;">${points[team].losses || 0}</td>
+                        <td><strong style="color:#00b894;font-size:1.2em;">${points[team].points || 0}</strong></td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                    <div style="text-align:center;margin-top:15px;">
+                        <button class="btn btn-secondary" onclick="this.parentElement.parentElement.remove()">✕ বন্ধ করুন</button>
+                    </div>
+                </div>
+            `;
+
+            document.querySelector('.container').insertAdjacentHTML('afterbegin', html);
+        }
+
+        // =====================================================
+        // ===== Firebase অপারেশন =====
+        // =====================================================
+        async function saveTournament() {
+            if (!isAdmin) { notifyError('❌ অ্যাডমিন লগইন করুন!'); return; }
+
+            const name = document.getElementById('tournamentNameInput').value.trim();
+            if (!name) { notifyError('❌ টুর্নামেন্টের নাম দিন!'); return; }
 
             if (teams.length < 4) {
                 notifyError(`❌ কমপক্ষে ৪ টি টিম প্রয়োজন! (বর্তমানে ${teams.length})`);
-                return;
-            }
-            if (teams.length % 2 !== 0) {
-                notifyError(`❌ টিম সংখ্যা জোড় হতে হবে! (বর্তমানে ${teams.length})`);
                 return;
             }
 
@@ -668,36 +1353,61 @@
             }
 
             try {
-                // Firebase এ ডাটা সেভ
                 const newRef = db.ref('cricketTournaments').push();
                 const data = {
                     name: name,
                     createdAt: Date.now(),
                     overs: maxOvers,
                     playersPerTeam: playersPerTeam,
-                    teams: teams.map(t => ({ name: t.name, players: t.players }))
+                    teams: teams.map(t => ({ name: t.name, players: t.players })),
+                    matches: matches.map(m => ({
+                        team1: m.team1,
+                        team2: m.team2,
+                        status: m.status,
+                        winner: m.winner,
+                        score: m.score,
+                        matchState: m.matchState
+                    })),
+                    matchResults: matchResults
                 };
 
                 await newRef.set(data);
-                console.log('✅ সেভ সফল! ID:', newRef.key);
                 notifySuccess(`✅ "${name}" টুর্নামেন্ট সেভ করা হয়েছে!`);
 
-                // UI আপডেট
                 document.getElementById('setupSection').style.display = 'none';
                 document.getElementById('tournamentSection').classList.add('active');
-                currentRound = 1;
-                generateRound();
+
+                generateGroupStage();
                 loadTournaments();
 
             } catch (error) {
-                console.error('❌ Error:', error);
+                console.error('Error:', error);
                 notifyError('❌ ' + error.message);
             }
         }
 
-        // =====================================================
-        // ===== টুর্নামেন্ট লোড =====
-        // =====================================================
+        async function saveTournamentData() {
+            if (!currentTournamentId) return;
+            try {
+                const data = {
+                    matches: matches.map(m => ({
+                        team1: m.team1,
+                        team2: m.team2,
+                        status: m.status,
+                        winner: m.winner,
+                        score: m.score,
+                        matchState: m.matchState
+                    })),
+                    matchResults: matchResults
+                };
+                await db.ref(`cricketTournaments/${currentTournamentId}`).update(data);
+            } catch (error) {
+                console.error('Auto-save error:', error);
+            }
+        }
+
+        let currentTournamentId = null;
+
         async function loadTournaments() {
             try {
                 const snapshot = await db.ref('cricketTournaments').once('value');
@@ -718,12 +1428,13 @@
                         <button class="t-delete" onclick="event.stopPropagation(); deleteTournament('${key}')">✕</button>
                         <div class="t-name">🏏 ${t.name || 'নামবিহীন'}</div>
                         <div class="t-info">${t.teams ? t.teams.length : 0} টি টিম | ${t.overs || 2} ওভার</div>
+                        <div class="t-info">${t.matches ? t.matches.length : 0} টি ম্যাচ</div>
                     `;
                     div.onclick = () => loadTournament(key);
                     container.appendChild(div);
                 });
             } catch (error) {
-                console.error('লোড করতে সমস্যা:', error);
+                console.error('Load error:', error);
             }
         }
 
@@ -733,18 +1444,23 @@
                 if (!snapshot.exists()) return;
                 const data = snapshot.val();
 
+                currentTournamentId = id;
                 teams = data.teams || [];
                 playersPerTeam = data.playersPerTeam || 5;
                 maxOvers = data.overs || 2;
+                matches = data.matches || [];
+                matchResults = data.matchResults || [];
 
                 document.getElementById('tournamentListSection').style.display = 'none';
                 document.getElementById('setupSection').style.display = 'none';
                 document.getElementById('tournamentSection').classList.add('active');
 
                 renderTeams();
+                renderMatches();
+                document.getElementById('matchCount').textContent = `মোট ম্যাচ: ${matches.length}`;
                 notifySuccess(`✅ "${data.name}" লোড হয়েছে!`);
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Load error:', error);
             }
         }
 
@@ -756,92 +1472,13 @@
                 notifySuccess('✅ ডিলিট করা হয়েছে!');
                 loadTournaments();
             } catch (error) {
-                console.error('Error:', error);
+                console.error('Delete error:', error);
             }
         }
 
         // =====================================================
-        // ===== টুর্নামেন্ট জেনারেট =====
+        // ===== UI কন্ট্রোল =====
         // =====================================================
-        function generateRound() {
-            const shuffled = [...teams].sort(() => Math.random() - 0.5);
-            const pairs = [];
-            for (let i = 0; i < shuffled.length; i += 2) {
-                if (i + 1 < shuffled.length) {
-                    pairs.push([shuffled[i].name, shuffled[i + 1].name]);
-                }
-            }
-            matches = pairs.map(pair => ({
-                round: currentRound,
-                team1: pair[0],
-                team2: pair[1],
-                status: 'pending',
-                winner: null,
-                score: null
-            }));
-            renderMatches();
-            notifyInfo(`📢 রাউন্ড ${currentRound} শুরু!`);
-        }
-
-        function renderMatches() {
-            const container = document.getElementById('matchesContainer');
-            if (matches.length === 0) {
-                container.innerHTML = '<div style="opacity:0.4;padding:40px;text-align:center;">কোনো ম্যাচ নেই</div>';
-                return;
-            }
-            container.innerHTML = matches.map((match, idx) => `
-                <div class="match-card">
-                    <div class="match-header">
-                        <span>🏅 রাউন্ড ${match.round}</span>
-                        <span>${match.status === 'pending' ? '⏳ অপেক্ষমান' : '✅ শেষ'}</span>
-                    </div>
-                    <div class="match-teams">
-                        <div class="team">🏏 ${match.team1}</div>
-                        <div class="vs">VS</div>
-                        <div class="team">🏏 ${match.team2}</div>
-                    </div>
-                    ${match.score ? `<div style="text-align:center;padding:10px;background:rgba(0,0,0,0.2);border-radius:8px;">${match.score}</div>` : ''}
-                    <div class="match-actions">
-                        <button class="btn btn-success" onclick="startMatch(${idx})">🎮 খেলা শুরু</button>
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function startMatch(index) {
-            notifyInfo(`🎮 ${matches[index].team1} vs ${matches[index].team2} ম্যাচ শুরু!`);
-            matches[index].status = 'completed';
-            matches[index].score = `${matches[index].team1} ৫০/২ - ${matches[index].team2} ৪৫/৪`;
-            matches[index].winner = matches[index].team1;
-            renderMatches();
-        }
-
-        function nextRound() {
-            if (matches.some(m => m.status !== 'completed')) {
-                notifyError('সব ম্যাচ শেষ করুন!');
-                return;
-            }
-            currentRound++;
-            generateRound();
-        }
-
-        function endTournament() {
-            notifySuccess('🏆 টুর্নামেন্ট শেষ!');
-            document.getElementById('tournamentSection').classList.remove('active');
-            document.getElementById('setupSection').style.display = 'block';
-            resetAll();
-        }
-
-        function resetAll() {
-            if (!isAdmin) { notifyError('❌ অ্যাডমিন লগইন করুন!'); return; }
-            teams = [];
-            matches = [];
-            currentRound = 0;
-            renderTeams();
-            updateStartButton();
-            document.getElementById('tournamentSection').classList.remove('active');
-        }
-
         function showCreateTournament() {
             if (!isAdmin) { notifyError('❌ অ্যাডমিন লগইন করুন!'); return; }
             document.getElementById('tournamentListSection').style.display = 'none';
@@ -856,11 +1493,32 @@
             loadTournaments();
         }
 
+        function resetAll() {
+            teams = [];
+            matches = [];
+            matchResults = [];
+            currentTournamentId = null;
+            renderTeams();
+            updateStartButton();
+            document.getElementById('tournamentSection').classList.remove('active');
+        }
+
+        function endTournament() {
+            if (!isAdmin) { notifyError('❌ অ্যাডমিন লগইন করুন!'); return; }
+            if (matches.some(m => m.status !== 'completed')) {
+                notifyError('সব ম্যাচ শেষ করুন!');
+                return;
+            }
+            notifySuccess('🏆 টুর্নামেন্ট শেষ!');
+            document.getElementById('tournamentSection').classList.remove('active');
+            document.getElementById('setupSection').style.display = 'block';
+            resetAll();
+        }
+
         // =====================================================
         // ===== ইভেন্ট লিসেনার =====
         // =====================================================
         document.addEventListener('DOMContentLoaded', function() {
-            // প্লেয়ার সংখ্যা পরিবর্তন
             document.getElementById('playerCountInput').addEventListener('change', function() {
                 playersPerTeam = parseInt(this.value) || 5;
                 document.getElementById('playerCountDisplay').textContent = playersPerTeam;
@@ -868,12 +1526,10 @@
                 updateStartButton();
             });
 
-            // ওভার পরিবর্তন
             document.getElementById('overSelect').addEventListener('change', function() {
                 maxOvers = parseInt(this.value) || 2;
             });
 
-            // Enter কী
             document.getElementById('teamNameInput').addEventListener('keypress', function(e) {
                 if (e.key === 'Enter' && isAdmin) addTeam();
             });
@@ -881,14 +1537,13 @@
                 if (e.key === 'Enter') loginAdmin();
             });
 
-            // ইনিশিয়াল
             loadTournaments();
             renderTeams();
             updateStartButton();
             document.getElementById('playerCountDisplay').textContent = playersPerTeam;
             updateAdminUI();
 
-            console.log('🏏 ক্রিকেট টুর্নামেন্ট রেডি!');
+            console.log('🏏 গ্রুপ স্টেজ টুর্নামেন্ট রেডি!');
             console.log('🔐 পাসওয়ার্ড: admin123');
         });
     </script>
