@@ -1105,6 +1105,31 @@
 
     <script>
         // =====================================================
+        // ===== নোটিফিকেশন =====
+        // =====================================================
+        function showNotification(message, type = 'info', duration = 4000) {
+            const container = document.getElementById('notificationContainer');
+            const notif = document.createElement('div');
+            notif.className = `notification ${type}`;
+            notif.innerHTML = `
+                <span class="msg">${message}</span>
+                <button class="close-notif" onclick="this.parentElement.remove()">✕</button>
+            `;
+            container.appendChild(notif);
+
+            setTimeout(() => {
+                if (notif.parentElement) {
+                    notif.style.animation = 'slideOut 0.5s ease forwards';
+                    setTimeout(() => notif.remove(), 500);
+                }
+            }, duration);
+        }
+
+        function notifySuccess(msg) { showNotification(msg, 'success'); }
+        function notifyError(msg) { showNotification(msg, 'error'); }
+        function notifyInfo(msg) { showNotification(msg, 'info'); }
+
+        // =====================================================
         // ===== অ্যাডমিন মোড =====
         // =====================================================
         let isAdmin = false;
@@ -1180,231 +1205,10 @@
                 document.getElementById('loginBtn').style.display = 'inline-block';
                 document.getElementById('logoutBtn').style.display = 'none';
             }
-
-            document.querySelectorAll('.match-actions .btn').forEach(btn => {
-                btn.style.display = 'inline-block';
-                btn.style.opacity = '1';
-                btn.style.pointerEvents = 'auto';
-                btn.style.cursor = 'pointer';
-            });
-
-            document.querySelectorAll('.btn:not(.match-actions .btn):not(.btn-secondary):not(.btn-login):not(.btn-logout)').forEach(btn => {
-                if (isAdmin) {
-                    btn.style.opacity = '1';
-                    btn.style.pointerEvents = 'auto';
-                    btn.style.cursor = 'pointer';
-                } else {
-                    btn.style.opacity = '0.5';
-                    btn.style.pointerEvents = 'none';
-                    btn.style.cursor = 'not-allowed';
-                }
-            });
-
-            document.querySelectorAll('.btn-secondary').forEach(btn => {
-                btn.style.opacity = '1';
-                btn.style.pointerEvents = 'auto';
-                btn.style.cursor = 'pointer';
-            });
-
-            document.querySelectorAll('input:not(#loginPassword):not(#editBallIndex):not(#editBallValue)').forEach(input => {
-                if (isAdmin) {
-                    input.style.opacity = '1';
-                    input.style.pointerEvents = 'auto';
-                } else {
-                    input.style.opacity = '0.5';
-                    input.style.pointerEvents = 'none';
-                }
-            });
-
-            document.querySelectorAll('.team-remove').forEach(btn => {
-                btn.style.display = isAdmin ? 'block' : 'none';
-            });
-
-            document.querySelectorAll('.player-tag span').forEach(btn => {
-                btn.style.display = isAdmin ? 'inline' : 'none';
-            });
-
-            document.querySelectorAll('.player-input-group .btn').forEach(btn => {
-                btn.style.display = isAdmin ? 'inline-block' : 'none';
-            });
-
-            document.querySelectorAll('.t-delete').forEach(btn => {
-                btn.style.display = isAdmin ? 'block' : 'none';
-            });
-
-            const createBtn = document.getElementById('createTournamentBtn');
-            if (createBtn) {
-                createBtn.style.display = isAdmin ? 'inline-block' : 'none';
-            }
-
-            document.querySelectorAll('.btn-edit').forEach(btn => {
-                if (isAdmin) {
-                    btn.style.display = 'inline-block';
-                } else {
-                    btn.style.display = 'none';
-                }
-            });
         }
 
         // =====================================================
-        // ===== নোটিফিকেশন =====
-        // =====================================================
-        function showNotification(message, type = 'info', duration = 4000) {
-            const container = document.getElementById('notificationContainer');
-            const notif = document.createElement('div');
-            notif.className = `notification ${type}`;
-            notif.innerHTML = `
-                <span class="msg">${message}</span>
-                <button class="close-notif" onclick="this.parentElement.remove()">✕</button>
-            `;
-            container.appendChild(notif);
-
-            setTimeout(() => {
-                if (notif.parentElement) {
-                    notif.style.animation = 'slideOut 0.5s ease forwards';
-                    setTimeout(() => notif.remove(), 500);
-                }
-            }, duration);
-        }
-
-        function notifySuccess(msg) { showNotification(msg, 'success'); }
-        function notifyError(msg) { showNotification(msg, 'error'); }
-        function notifyInfo(msg) { showNotification(msg, 'info'); }
-
-        // =====================================================
-        // ===== এডিট স্কোর =====
-        // =====================================================
-        function openEditScore() {
-            if (!isAdmin) {
-                notifyError('❌ শুধু অ্যাডমিন স্কোর এডিট করতে পারেন!');
-                return;
-            }
-            if (!matchState.tossDone) {
-                notifyError('টস করুন আগে!');
-                return;
-            }
-            if (matchState.balls.length === 0) {
-                notifyError('কোনো বল যোগ করা হয়নি!');
-                return;
-            }
-            document.getElementById('editScoreModal').classList.add('active');
-            document.getElementById('editBallIndex').value = '';
-            document.getElementById('editBallValue').value = '';
-            setTimeout(() => document.getElementById('editBallIndex').focus(), 100);
-        }
-
-        function closeEditScore() {
-            document.getElementById('editScoreModal').classList.remove('active');
-        }
-
-        function saveEditScore() {
-            const index = parseInt(document.getElementById('editBallIndex').value);
-            const value = document.getElementById('editBallValue').value.trim();
-
-            if (isNaN(index) || index < 0 || index >= matchState.balls.length) {
-                notifyError('বল নম্বর সঠিক নয়!');
-                return;
-            }
-
-            if (!value) {
-                notifyError('স্কোর দিন!');
-                return;
-            }
-
-            const oldBall = matchState.balls[index];
-            
-            if (oldBall.isWicket) {
-                matchState.wickets--;
-            } else if (oldBall.isExtra) {
-                matchState.extras -= oldBall.runs;
-                matchState.totalRuns -= oldBall.runs;
-                if (oldBall.extraType === 'NB' || oldBall.extraType === 'WD') {
-                    matchState.ballsBowled--;
-                }
-            } else {
-                matchState.totalRuns -= oldBall.runs;
-                matchState.ballsBowled--;
-            }
-
-            const newBall = { runs: value, isWicket: false, isExtra: false, extraType: null };
-
-            if (value === 'WD' || value === 'NB') {
-                newBall.isExtra = true;
-                newBall.extraType = value;
-                newBall.runs = 1;
-                matchState.extras += 1;
-                matchState.totalRuns += 1;
-            } else if (value === 'B' || value === 'LB') {
-                newBall.isExtra = true;
-                newBall.extraType = value;
-                newBall.runs = 4;
-                matchState.extras += 4;
-                matchState.totalRuns += 4;
-            } else if (value === 'W') {
-                newBall.isWicket = true;
-                newBall.runs = 0;
-                matchState.wickets++;
-                if (matchState.wickets >= matchState.maxWickets) {
-                    notifyInfo(`💀 ${matchState.maxWickets} উইকেট!`);
-                    endInnings();
-                    closeEditScore();
-                    return;
-                }
-            } else {
-                const num = parseInt(value);
-                if (isNaN(num) || num < 0 || num > 6) {
-                    notifyError('ভুল স্কোর! (0,1,2,3,4,6,W,WD,NB,B,LB)');
-                    return;
-                }
-                newBall.runs = num;
-                matchState.totalRuns += num;
-            }
-
-            if (!newBall.isExtra || value === 'NB') {
-                matchState.ballsBowled++;
-            }
-
-            matchState.balls[index] = newBall;
-
-            closeEditScore();
-            renderScoreboard();
-            notifySuccess('✅ স্কোর আপডেট করা হয়েছে!');
-            autoSaveTournament();
-        }
-
-        // =====================================================
-        // ===== লগইন বাটন ইভেন্ট =====
-        // =====================================================
-        document.addEventListener('DOMContentLoaded', function() {
-            const loginBtn = document.getElementById('loginSubmitBtn');
-            if (loginBtn) {
-                loginBtn.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    loginAdmin();
-                });
-            }
-
-            const passwordInput = document.getElementById('loginPassword');
-            if (passwordInput) {
-                passwordInput.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        loginAdmin();
-                    }
-                });
-            }
-
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Escape') {
-                    closeLoginModal();
-                    closeEditScore();
-                    closeScoreboard();
-                }
-            });
-        });
-
-        // =====================================================
-        // ===== Firebase =====
+        // ===== ফায়ারবেস =====
         // =====================================================
         let currentTournamentId = null;
         let currentTournamentName = '';
@@ -1524,7 +1328,6 @@
                     renderTeams();
                     renderMatches();
                     updateRoundInfo();
-                    updateStartButton();
                     updateAdminUI();
                     updateAutoSaveIndicator('saved');
                     
@@ -1585,71 +1388,6 @@
             }, 1000);
         }
 
-        async function saveTournament() {
-            if (!isAdmin) {
-                notifyError('❌ শুধু অ্যাডমিন টুর্নামেন্ট তৈরি করতে পারেন!');
-                return;
-            }
-            
-            const name = document.getElementById('tournamentNameInput').value.trim();
-            if (!name) {
-                notifyError('দয়া করে টুর্নামেন্টের নাম দিন!');
-                return;
-            }
-            
-            if (teams.length < 4 || teams.length % 2 !== 0) {
-                notifyError('কমপক্ষে ৪ টি জোড় সংখ্যক টিম প্রয়োজন!');
-                return;
-            }
-            
-            const incompleteTeams = teams.filter(t => t.players.length !== playersPerTeam);
-            if (incompleteTeams.length > 0) {
-                notifyError(`${incompleteTeams.length} টি টিমে প্লেয়ার কম!`);
-                return;
-            }
-
-            try {
-                const db = window.db;
-                const newRef = push(ref(db, 'cricketTournaments'));
-                currentTournamentId = newRef.key;
-                currentTournamentName = name;
-                
-                const data = {
-                    name: name,
-                    createdAt: new Date().toISOString(),
-                    overs: maxOvers,
-                    playersPerTeam: playersPerTeam,
-                    currentRound: currentRound || 1,
-                    tournamentStarted: true,
-                    status: 'ongoing',
-                    teams: {}
-                };
-                
-                teams.forEach((team, i) => {
-                    data.teams[`team_${i}`] = {
-                        name: team.name,
-                        players: team.players
-                    };
-                });
-                
-                await set(newRef, data);
-                notifySuccess(`✅ "${name}" টুর্নামেন্ট সেভ করা হয়েছে!`);
-                
-                document.getElementById('setupSection').style.display = 'none';
-                document.getElementById('tournamentSection').classList.add('active');
-                tournamentStarted = true;
-                
-                generateRound();
-                await updateTournamentInFirebase();
-                updateAdminUI();
-                updateAutoSaveIndicator('saved');
-                
-            } catch (error) {
-                console.error('সেভ করতে সমস্যা:', error);
-                notifyError('সেভ করতে সমস্যা!');
-            }
-        }
-
         async function updateTournamentInFirebase() {
             if (!isAdmin || !currentTournamentId) {
                 return;
@@ -1701,24 +1439,6 @@
             }
         }
 
-        function showCreateTournament() {
-            if (!isAdmin) {
-                notifyError('❌ শুধু অ্যাডমিন টুর্নামেন্ট তৈরি করতে পারেন!');
-                return;
-            }
-            document.getElementById('tournamentListSection').style.display = 'none';
-            document.getElementById('setupSection').style.display = 'block';
-            document.getElementById('tournamentSection').classList.remove('active');
-            resetAll();
-            updateAdminUI();
-        }
-
-        function hideCreateTournament() {
-            document.getElementById('setupSection').style.display = 'none';
-            document.getElementById('tournamentListSection').style.display = 'block';
-            loadTournaments();
-        }
-
         // =====================================================
         // ===== ক্রিকেট টুর্নামেন্ট ম্যানেজার =====
         // =====================================================
@@ -1731,10 +1451,6 @@
         let currentMatchData = null;
         let maxOvers = 2;
         let playersPerTeam = 5;
-
-        function createTeam(name) {
-            return { name: name, players: [] };
-        }
 
         let matchState = {
             tossDone: false,
@@ -1756,7 +1472,7 @@
             maxWickets: 5
         };
 
-        // ===== ওভার ও প্লেয়ার সংখ্যা =====
+        // ===== সেটআপ =====
         document.getElementById('overSelect').addEventListener('change', function() {
             maxOvers = parseInt(this.value);
             notifyInfo(`📊 ওভার পরিবর্তন: ${maxOvers} ওভার`);
@@ -1774,7 +1490,11 @@
             notifyInfo(`👥 প্লেয়ার সংখ্যা পরিবর্তন: ${val} জন`);
         });
 
-        // ===== টিম ম্যানেজমেন্ট =====
+        // ===== টিম =====
+        function createTeam(name) {
+            return { name: name, players: [] };
+        }
+
         function addTeam() {
             if (!isAdmin) {
                 notifyError('❌ শুধু অ্যাডমিন টিম যোগ করতে পারেন!');
@@ -1796,7 +1516,6 @@
             renderTeams();
             updateStartButton();
             notifySuccess(`✅ "${name}" টিম যোগ করা হয়েছে!`);
-            autoSaveTournament();
         }
 
         function removeTeam(index) {
@@ -1813,10 +1532,9 @@
             renderTeams();
             updateStartButton();
             notifyInfo(`❌ "${name}" টিম সরানো হয়েছে।`);
-            autoSaveTournament();
         }
 
-        // ===== প্লেয়ার ম্যানেজমেন্ট =====
+        // ===== প্লেয়ার =====
         function addPlayer(teamIndex) {
             if (!isAdmin) {
                 notifyError('❌ শুধু অ্যাডমিন প্লেয়ার যোগ করতে পারেন!');
@@ -1841,7 +1559,6 @@
             input.value = '';
             renderTeams();
             notifySuccess(`✅ "${name}" যোগ হয়েছে!`);
-            autoSaveTournament();
         }
 
         function removePlayer(teamIndex, playerIndex) {
@@ -1853,7 +1570,6 @@
             teams[teamIndex].players.splice(playerIndex, 1);
             renderTeams();
             notifyInfo(`❌ "${name}" সরানো হয়েছে।`);
-            autoSaveTournament();
         }
 
         function renderTeams() {
@@ -1894,6 +1610,98 @@
             const validTeams = teams.length >= 4 && teams.length % 2 === 0;
 
             btn.disabled = !(validTeams && allHavePlayers);
+        }
+
+        // ===== টুর্নামেন্ট সেভ =====
+        async function saveTournament() {
+            if (!isAdmin) {
+                notifyError('❌ শুধু অ্যাডমিন টুর্নামেন্ট তৈরি করতে পারেন!');
+                return;
+            }
+            
+            const name = document.getElementById('tournamentNameInput').value.trim();
+            if (!name) {
+                notifyError('❌ দয়া করে টুর্নামেন্টের নাম দিন!');
+                return;
+            }
+            
+            if (teams.length < 4 || teams.length % 2 !== 0) {
+                notifyError(`❌ কমপক্ষে ৪ টি জোড় সংখ্যক টিম প্রয়োজন! (বর্তমানে ${teams.length} টি টিম)`);
+                return;
+            }
+            
+            let incompleteTeams = [];
+            teams.forEach((t) => {
+                if (t.players.length !== playersPerTeam) {
+                    incompleteTeams.push(`${t.name} (${t.players.length}/${playersPerTeam})`);
+                }
+            });
+            
+            if (incompleteTeams.length > 0) {
+                notifyError(`❌ প্লেয়ার কম: ${incompleteTeams.join(', ')}`);
+                return;
+            }
+
+            try {
+                const db = window.db;
+                const newRef = push(ref(db, 'cricketTournaments'));
+                currentTournamentId = newRef.key;
+                currentTournamentName = name;
+                
+                const data = {
+                    name: name,
+                    createdAt: new Date().toISOString(),
+                    overs: maxOvers,
+                    playersPerTeam: playersPerTeam,
+                    currentRound: 1,
+                    tournamentStarted: true,
+                    status: 'ongoing',
+                    teams: {}
+                };
+                
+                teams.forEach((team, i) => {
+                    data.teams[`team_${i}`] = {
+                        name: team.name,
+                        players: team.players
+                    };
+                });
+                
+                await set(newRef, data);
+                
+                notifySuccess(`✅ "${name}" টুর্নামেন্ট সেভ করা হয়েছে!`);
+                
+                document.getElementById('setupSection').style.display = 'none';
+                document.getElementById('tournamentSection').classList.add('active');
+                tournamentStarted = true;
+                currentRound = 1;
+                
+                generateRound();
+                await updateTournamentInFirebase();
+                updateAdminUI();
+                updateAutoSaveIndicator('saved');
+                
+            } catch (error) {
+                console.error('সেভ করতে সমস্যা:', error);
+                notifyError(`❌ সেভ করতে সমস্যা: ${error.message}`);
+            }
+        }
+
+        function showCreateTournament() {
+            if (!isAdmin) {
+                notifyError('❌ শুধু অ্যাডমিন টুর্নামেন্ট তৈরি করতে পারেন!');
+                return;
+            }
+            document.getElementById('tournamentListSection').style.display = 'none';
+            document.getElementById('setupSection').style.display = 'block';
+            document.getElementById('tournamentSection').classList.remove('active');
+            resetAll();
+            updateAdminUI();
+        }
+
+        function hideCreateTournament() {
+            document.getElementById('setupSection').style.display = 'none';
+            document.getElementById('tournamentListSection').style.display = 'block';
+            loadTournaments();
         }
 
         function resetAll() {
@@ -1950,7 +1758,7 @@
             }
         }
 
-        // ===== ম্যাচ রেন্ডার =====
+        // ===== ম্যাচ =====
         function renderMatches() {
             const container = document.getElementById('matchesContainer');
             if (matches.length === 0) {
@@ -2003,7 +1811,7 @@
             document.getElementById('nextRoundBtn').disabled = !allCompleted;
         }
 
-        // ===== ম্যাচ ফাংশন =====
+        // ===== ম্যাচ কন্ট্রোল =====
         function startCricketMatch(index) {
             if (matches[index].status === 'ongoing' || matches[index].status === 'completed') {
                 notifyInfo('এই ম্যাচ ইতিমধ্যে শুরু বা শেষ হয়েছে!');
@@ -2049,7 +1857,6 @@
             openScoreboard();
             renderScoreboard();
             notifyInfo(`🎮 ${match.team1} vs ${match.team2} ম্যাচ শুরু!`);
-            autoSaveTournament();
         }
 
         function resumeCricketMatch(index) {
@@ -2149,7 +1956,6 @@
             document.getElementById('tossSection').querySelector('button').disabled = true;
             renderScoreboard();
             notifySuccess(`🪙 ${tossWinner} টস জিতেছে!`);
-            autoSaveTournament();
         }
 
         // ===== স্কোরিং =====
@@ -2256,7 +2062,6 @@
                 return;
             }
 
-            // দ্বিতীয় ইনিংস শেষ
             matchState.isComplete = true;
             matchState.inningsComplete = true;
 
@@ -2334,7 +2139,7 @@
             autoSaveTournament();
         }
 
-        // ===== স্কোরবোর্ড রেন্ডার =====
+        // ===== স্কোরবোর্ড =====
         function renderScoreboard() {
             const container = document.getElementById('inningsContainer');
 
@@ -2473,6 +2278,105 @@
             updateAdminUI();
         }
 
+        // ===== এডিট স্কোর =====
+        function openEditScore() {
+            if (!isAdmin) {
+                notifyError('❌ শুধু অ্যাডমিন স্কোর এডিট করতে পারেন!');
+                return;
+            }
+            if (!matchState.tossDone) {
+                notifyError('টস করুন আগে!');
+                return;
+            }
+            if (matchState.balls.length === 0) {
+                notifyError('কোনো বল যোগ করা হয়নি!');
+                return;
+            }
+            document.getElementById('editScoreModal').classList.add('active');
+            document.getElementById('editBallIndex').value = '';
+            document.getElementById('editBallValue').value = '';
+            setTimeout(() => document.getElementById('editBallIndex').focus(), 100);
+        }
+
+        function closeEditScore() {
+            document.getElementById('editScoreModal').classList.remove('active');
+        }
+
+        function saveEditScore() {
+            const index = parseInt(document.getElementById('editBallIndex').value);
+            const value = document.getElementById('editBallValue').value.trim();
+
+            if (isNaN(index) || index < 0 || index >= matchState.balls.length) {
+                notifyError('বল নম্বর সঠিক নয়!');
+                return;
+            }
+
+            if (!value) {
+                notifyError('স্কোর দিন!');
+                return;
+            }
+
+            const oldBall = matchState.balls[index];
+            
+            if (oldBall.isWicket) {
+                matchState.wickets--;
+            } else if (oldBall.isExtra) {
+                matchState.extras -= oldBall.runs;
+                matchState.totalRuns -= oldBall.runs;
+                if (oldBall.extraType === 'NB' || oldBall.extraType === 'WD') {
+                    matchState.ballsBowled--;
+                }
+            } else {
+                matchState.totalRuns -= oldBall.runs;
+                matchState.ballsBowled--;
+            }
+
+            const newBall = { runs: value, isWicket: false, isExtra: false, extraType: null };
+
+            if (value === 'WD' || value === 'NB') {
+                newBall.isExtra = true;
+                newBall.extraType = value;
+                newBall.runs = 1;
+                matchState.extras += 1;
+                matchState.totalRuns += 1;
+            } else if (value === 'B' || value === 'LB') {
+                newBall.isExtra = true;
+                newBall.extraType = value;
+                newBall.runs = 4;
+                matchState.extras += 4;
+                matchState.totalRuns += 4;
+            } else if (value === 'W') {
+                newBall.isWicket = true;
+                newBall.runs = 0;
+                matchState.wickets++;
+                if (matchState.wickets >= matchState.maxWickets) {
+                    notifyInfo(`💀 ${matchState.maxWickets} উইকেট!`);
+                    endInnings();
+                    closeEditScore();
+                    return;
+                }
+            } else {
+                const num = parseInt(value);
+                if (isNaN(num) || num < 0 || num > 6) {
+                    notifyError('ভুল স্কোর! (0,1,2,3,4,6,W,WD,NB,B,LB)');
+                    return;
+                }
+                newBall.runs = num;
+                matchState.totalRuns += num;
+            }
+
+            if (!newBall.isExtra || value === 'NB') {
+                matchState.ballsBowled++;
+            }
+
+            matchState.balls[index] = newBall;
+
+            closeEditScore();
+            renderScoreboard();
+            notifySuccess('✅ স্কোর আপডেট করা হয়েছে!');
+            autoSaveTournament();
+        }
+
         // ===== পয়েন্ট টেবিল =====
         function showPointsTable() {
             const points = {};
@@ -2604,15 +2508,41 @@
             updateAdminUI();
         }
 
-        // ===== ইভেন্ট =====
-        document.getElementById('teamNameInput').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter' && isAdmin) {
-                addTeam();
-            }
-        });
-
-        // ===== ইনিশিয়ালাইজ =====
+        // ===== লগইন ইভেন্ট =====
         document.addEventListener('DOMContentLoaded', function() {
+            const loginBtn = document.getElementById('loginSubmitBtn');
+            if (loginBtn) {
+                loginBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    loginAdmin();
+                });
+            }
+
+            const passwordInput = document.getElementById('loginPassword');
+            if (passwordInput) {
+                passwordInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        loginAdmin();
+                    }
+                });
+            }
+
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                    closeLoginModal();
+                    closeEditScore();
+                    closeScoreboard();
+                }
+            });
+
+            document.getElementById('teamNameInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && isAdmin) {
+                    addTeam();
+                }
+            });
+
+            // Initialize
             isAdmin = false;
             
             setTimeout(function() {
@@ -2631,4 +2561,4 @@
         });
     </script>
 </body>
-</html>   
+</html>
