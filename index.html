@@ -1,1133 +1,1865 @@
-<script>
-    // FIREBASE CONFIG
-    const firebaseConfig = {
-        apiKey: "AIzaSyA6c69hOzq8eauL3lQoY2QkCKXm47RD09E",
-        authDomain: "multiple-mass.firebaseapp.com",
-        databaseURL: "https://multiple-mass-default-rtdb.asia-southeast1.firebasedatabase.app",
-        projectId: "multiple-mass",
-        storageBucket: "multiple-mass.firebasestorage.app",
-        messagingSenderId: "1042463319969",
-        appId: "1:1042463319969:web:254ebce8ef503ecacecde0",
-        measurementId: "G-57SY5V1XKD"
-    };
-
-    let db = null;
-    let firebaseReady = false;
-    let firebaseErrorMsg = '';
-
-    function updateFirebaseStatus(status, msg) {
-        const statusEl = document.getElementById('fbStatusText');
-        const iconEl = document.querySelector('#firebaseStatus i');
-        if (!statusEl) return;
-        statusEl.textContent = msg;
-        if (iconEl) {
-            if (status === 'ok') iconEl.className = 'fa-solid fa-circle text-emerald-400 text-[8px] mr-1';
-            else if (status === 'error') iconEl.className = 'fa-solid fa-circle text-rose-400 text-[8px] mr-1';
-            else iconEl.className = 'fa-solid fa-circle text-amber-400 text-[8px] mr-1';
-        }
-    }
-
-    try {
-        firebase.initializeApp(firebaseConfig);
-        db = firebase.database();
-        firebaseReady = true;
-        updateFirebaseStatus('ok', 'Firebase সংযুক্ত ✓');
-        db.ref('.info/connected').on('value', (snap) => {
-            if (snap.val() === true) updateFirebaseStatus('ok', 'Firebase সংযুক্ত ✓');
-            else updateFirebaseStatus('pending', 'Firebase সংযোগ বিচ্ছিন্ন');
-        });
-    } catch (e) {
-        firebaseReady = false;
-        firebaseErrorMsg = e.message;
-        updateFirebaseStatus('error', 'Firebase init ব্যর্থ');
-    }
-
-    // APP STATE
-    let currentMessId = null;
-    let currentMessMeta = null;
-    let isAdmin = false;
-    let pendingAdminCallback = null;
-    let isRemoteUpdate = false;
-    let currentListenerRef = null;
-
-    let messDetails = { name: "মেস মিল ও হিসাব সিস্টেম" };
-    let selectedMonth = new Date().toISOString().slice(0, 7);
-    let members = [];
-    let mealsData = {};
-    let depositData = [];
-    let bazarData = [];
-    let polls = {};   // { "YYYY-MM-DD": { m: {votes:{id:qty}}, l: {...}, d: {...} } }
-
-    // Vote modal state
-    let pendingVote = null; // { dateStr, mealType, memberId, voteValue }
-
-    const bnMonths = {
-        "01": "জানুয়ারি", "02": "ফেব্রুয়ারি", "03": "মার্চ", "04": "এপ্রিল",
-        "05": "মে", "06": "জুন", "07": "জুলাই", "08": "আগস্ট",
-        "09": "সেপ্টেম্বর", "10": "অক্টোবর", "11": "নভেম্বর", "12": "ডিসেম্বর"
-    };
-    const bnDays = ["রবিবার", "সোমবার", "মঙ্গলবার", "বুধবার", "বৃহস্পতিবার", "শুক্রবার", "শনিবার"];
-
-    function showJusticeModal() { const m = document.getElementById('justiceModal'); if (m) m.classList.remove('hidden'); }
-    function closeJusticeModal() { const m = document.getElementById('justiceModal'); if (m) m.classList.add('hidden'); }
-
-    window.onload = function() {
-        if (localStorage.getItem('mess_theme') === 'dark') {
-            document.documentElement.classList.add('dark');
-            const icon = document.getElementById('themeIcon');
-            if (icon) icon.className = "fa-solid fa-sun text-base text-amber-400";
-        }
-
-        const pdp = document.getElementById('pollDatePicker');
-        if (pdp) pdp.value = new Date().toISOString().slice(0, 10);
-
-        const savedMessId = localStorage.getItem('current_mess_id');
-        const savedViewPwd = localStorage.getItem('current_mess_viewpwd');
-        const savedAdminPwd = localStorage.getItem('current_mess_adminpwd');
-        const savedIsAdmin = localStorage.getItem('current_mess_isadmin') === 'true';
-
-        if (savedMessId && savedViewPwd && firebaseReady) {
-            attemptJoinMess(savedMessId, savedViewPwd, savedAdminPwd, savedIsAdmin, true);
-        } else {
-            showLoginScreen();
-        }
-
-        setTimeout(() => showJusticeModal(), 800);
-    };
-
-    function showLoginScreen() {
-        document.getElementById('loginScreen').classList.remove('hidden');
-        document.getElementById('mainApp').classList.add('hidden');
-    }
-    function showMainApp() {
-        document.getElementById('loginScreen').classList.add('hidden');
-        document.getElementById('mainApp').classList.remove('hidden');
-    }
-    function showLoginTab(tab) {
-        const joinTab = document.getElementById('tabLoginJoin');
-        const createTab = document.getElementById('tabLoginCreate');
-        const joinForm = document.getElementById('joinForm');
-        const createForm = document.getElementById('createForm');
-        if (tab === 'join') {
-            joinTab.className = "flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition bg-white dark:bg-slate-900 text-emerald-600 shadow-sm";
-            createTab.className = "flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition text-slate-600 dark:text-slate-400";
-            joinForm.classList.remove('hidden');
-            createForm.classList.add('hidden');
-        } else {
-            createTab.className = "flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition bg-white dark:bg-slate-900 text-indigo-600 shadow-sm";
-            joinTab.className = "flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition text-slate-600 dark:text-slate-400";
-            createForm.classList.remove('hidden');
-            joinForm.classList.add('hidden');
-        }
-        hideLoginError();
-    }
-    function showLoginError(msg) {
-        const box = document.getElementById('loginError');
-        document.getElementById('loginErrorMsg').textContent = msg;
-        box.classList.remove('hidden');
-        setTimeout(() => box.classList.add('hidden'), 10000);
-    }
-    function hideLoginError() { document.getElementById('loginError').classList.add('hidden'); }
-
-    function handleJoinMess(e) {
-        e.preventDefault();
-        hideLoginError();
-        const messId = document.getElementById('joinMessId').value.trim().toLowerCase();
-        const viewPwd = document.getElementById('joinPassword').value;
-        if (!messId || !viewPwd) { showLoginError('❌ Mess ID এবং পাসওয়ার্ড দিন'); return; }
-        if (!firebaseReady || !db) { showLoginError('❌ Firebase সংযোগ নেই'); return; }
-        attemptJoinMess(messId, viewPwd, null, false, false);
-    }
-
-    function attemptJoinMess(messId, viewPwd, adminPwd, wasAdmin, silent) {
-        db.ref(`messes/${messId}/meta`).once('value').then(snapshot => {
-            const meta = snapshot.val();
-            if (!meta) { if (!silent) showLoginError('❌ Mess ID খুঁজে পাওয়া যায়নি!'); else showLoginScreen(); return; }
-            if (meta.viewPassword !== viewPwd) { if (!silent) showLoginError('❌ পাসওয়ার্ড ভুল!'); else showLoginScreen(); return; }
-            currentMessId = messId;
-            currentMessMeta = meta;
-            isAdmin = wasAdmin && adminPwd === meta.adminPassword;
-            localStorage.setItem('current_mess_id', messId);
-            localStorage.setItem('current_mess_viewpwd', viewPwd);
-            localStorage.setItem('current_mess_adminpwd', isAdmin ? adminPwd : '');
-            localStorage.setItem('current_mess_isadmin', isAdmin ? 'true' : 'false');
-            enterMess(messId, meta);
-        }).catch(err => {
-            if (!silent) showLoginError('❌ সংযোগে সমস্যা: ' + err.message);
-            else showLoginScreen();
-        });
-    }
-
-    function handleCreateMess(e) {
-        e.preventDefault();
-        hideLoginError();
-        const messId = document.getElementById('createMessId').value.trim().toLowerCase();
-        const messName = document.getElementById('createMessName').value.trim();
-        const viewPwd = document.getElementById('createViewPassword').value;
-        const adminPwd = document.getElementById('createAdminPassword').value;
-        if (!/^[a-z0-9\-]{3,30}$/.test(messId)) { showLoginError('❌ Mess ID: ৩-৩০ অক্ষর (a-z, 0-9, -)'); return; }
-        if (!messName) { showLoginError('❌ মেসের নাম দিন'); return; }
-        if (!viewPwd || viewPwd.length < 3) { showLoginError('❌ View Password কমপক্ষে ৩ অক্ষর'); return; }
-        if (!adminPwd || adminPwd.length < 4) { showLoginError('❌ Admin Password কমপক্ষে ৪ অক্ষর'); return; }
-        if (!firebaseReady || !db) { showLoginError('❌ Firebase সংযোগ নেই'); return; }
-
-        db.ref(`messes/${messId}/meta`).once('value').then(snapshot => {
-            if (snapshot.exists()) { showLoginError('❌ এই Mess ID আগেই ব্যবহৃত!'); throw new Error('MESS_EXISTS'); }
-            const newMeta = { name: messName, viewPassword: viewPwd, adminPassword: adminPwd, createdAt: Date.now() };
-            const initialData = {
-                meta: newMeta,
-                data: {
-                    messDetails: { name: messName },
-                    members: [
-                        { id: 'm1', name: 'সদস্য ১', phone: '', color: 'bg-indigo-600', offSchedule: { m: false, l: false, d: false } },
-                        { id: 'm2', name: 'সদস্য ২', phone: '', color: 'bg-emerald-600', offSchedule: { m: false, l: false, d: false } }
-                    ],
-                    mealsData: {},
-                    depositData: [],
-                    bazarData: [],
-                    polls: {}
+<!DOCTYPE html>
+<html lang="bn" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>মেস মিল ও হিসাব সিস্টেম Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,700;1,400&family=Hind+Siliguri:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Hind Siliguri', 'Inter', 'sans-serif'], arabic: ['Amiri', 'serif'] },
+                    colors: { mess: { 50:'#f0fdf4',100:'#dcfce7',500:'#22c55e',600:'#16a34a',700:'#15803d',800:'#166534',900:'#14532d' } }
                 }
-            };
-            return db.ref(`messes/${messId}`).set(initialData).then(() => newMeta);
-        }).then((newMeta) => {
-            currentMessId = messId;
-            currentMessMeta = newMeta;
-            isAdmin = true;
-            localStorage.setItem('current_mess_id', messId);
-            localStorage.setItem('current_mess_viewpwd', newMeta.viewPassword);
-            localStorage.setItem('current_mess_adminpwd', newMeta.adminPassword);
-            localStorage.setItem('current_mess_isadmin', 'true');
-            showToast('✅ নতুন মেস তৈরি হয়েছে!');
-            enterMess(messId, newMeta);
-        }).catch(err => {
-            if (err.message === 'MESS_EXISTS') return;
-            showLoginError('❌ মেস তৈরি ব্যর্থ: ' + err.message);
-        });
-    }
-
-    function enterMess(messId, meta) {
-        messDetails = { name: meta.name };
-        document.getElementById('headerMessId').textContent = messId;
-        document.getElementById('headerMonthText').textContent = getBengaliMonthYear(selectedMonth);
-        const mp = document.getElementById('monthPicker');
-        if (mp) mp.value = selectedMonth;
-        updateAdminUI();
-        showMainApp();
-        startMessSync(messId);
-        setTimeout(() => showJusticeModal(), 1000);
-    }
-
-    function startMessSync(messId) {
-        if (currentListenerRef) currentListenerRef.off();
-        updateSyncBadge('connecting');
-        currentListenerRef = db.ref(`messes/${messId}/data`);
-        currentListenerRef.on('value', (snapshot) => {
-            const data = snapshot.val();
-            isRemoteUpdate = true;
-            if (!data) { isRemoteUpdate = false; updateSyncBadge('live'); return; }
-
-            if (data.messDetails) messDetails = data.messDetails;
-            if (Array.isArray(data.members)) members = data.members;
-            if (data.mealsData) mealsData = data.mealsData;
-            if (Array.isArray(data.depositData)) depositData = data.depositData;
-            if (Array.isArray(data.bazarData)) bazarData = data.bazarData;
-            if (data.polls && typeof data.polls === 'object') polls = data.polls;
-            else polls = {};
-
-            members.forEach(m => {
-                if (!m.offSchedule) m.offSchedule = { m: false, l: false, d: false };
-            });
-
-            document.getElementById('headerMessName').textContent = messDetails.name || currentMessMeta.name;
-            document.getElementById('headerMonthText').textContent = getBengaliMonthYear(selectedMonth);
-
-            renderAll();
-            updateSyncBadge('live');
-            isRemoteUpdate = false;
-        }, (error) => {
-            updateSyncBadge('offline');
-            isRemoteUpdate = false;
-        });
-    }
-
-    function pushDataToFirebase() {
-        if (!firebaseReady || !currentMessId || isRemoteUpdate) return;
-        db.ref(`messes/${currentMessId}/data`).set({
-            messDetails, members, mealsData, depositData, bazarData,
-            polls, lastUpdated: Date.now()
-        }).catch(err => console.error('Push error:', err));
-    }
-
-    function logoutFromMess() {
-        if (!confirm('মেস থেকে বের হতে চান?')) return;
-        if (currentListenerRef) currentListenerRef.off();
-        localStorage.removeItem('current_mess_id');
-        localStorage.removeItem('current_mess_viewpwd');
-        localStorage.removeItem('current_mess_adminpwd');
-        localStorage.removeItem('current_mess_isadmin');
-        currentMessId = null; currentMessMeta = null; isAdmin = false;
-        members = []; mealsData = {}; depositData = []; bazarData = []; polls = {};
-        document.getElementById('joinForm').reset();
-        document.getElementById('createForm').reset();
-        showLoginTab('join');
-        showLoginScreen();
-        showToast('লগআউট সম্পন্ন', 'info');
-    }
-
-    function updateSyncBadge(status) {
-        const icon = document.getElementById('syncIcon');
-        const text = document.getElementById('syncText');
-        if (!icon || !text) return;
-        if (status === 'live') { icon.className = "fa-solid fa-cloud text-emerald-400 pulse-live"; text.textContent = "লাইভ"; }
-        else if (status === 'offline') { icon.className = "fa-solid fa-cloud-slash text-rose-400"; text.textContent = "অফলাইন"; }
-        else { icon.className = "fa-solid fa-cloud text-amber-400"; text.textContent = "সংযোগ..."; }
-    }
-
-    function toggleAdminAuth() {
-        if (isAdmin) {
-            isAdmin = false;
-            localStorage.setItem('current_mess_isadmin', 'false');
-            updateAdminUI();
-            showToast('ভিউয়ার মোড', 'info');
-        } else {
-            document.getElementById('adminPinInput').value = '';
-            document.getElementById('adminModal').classList.remove('hidden');
+            }
         }
-    }
-    function closeAdminModal() { document.getElementById('adminModal').classList.add('hidden'); pendingAdminCallback = null; }
-    function verifyAdminPin() {
-        const inputPin = document.getElementById('adminPinInput').value;
-        if (!currentMessMeta) return;
-        if (inputPin === currentMessMeta.adminPassword) {
-            isAdmin = true;
-            localStorage.setItem('current_mess_isadmin', 'true');
-            localStorage.setItem('current_mess_adminpwd', inputPin);
-            updateAdminUI();
-            closeAdminModal();
-            showToast('এডমিন লগইন সফল!');
-            if (pendingAdminCallback) { const cb = pendingAdminCallback; pendingAdminCallback = null; cb(); }
-        } else showToast('ভুল পাসওয়ার্ড!', 'error');
-    }
-    function requireAdmin(callback) {
-        if (isAdmin) callback();
-        else {
-            pendingAdminCallback = callback;
-            document.getElementById('adminPinInput').value = '';
-            document.getElementById('adminModal').classList.remove('hidden');
+    </script>
+    <style>
+        body { font-family: 'Hind Siliguri', 'Inter', sans-serif; }
+        .excel-scroll::-webkit-scrollbar { height: 8px; width: 8px; }
+        .excel-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.05); }
+        .excel-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .dark .excel-scroll::-webkit-scrollbar-thumb { background: #475569; }
+        .input-cell:focus { outline: 2px solid #6366f1; background-color: #e0e7ff; border-radius: 4px; }
+        .dark .input-cell:focus { background-color: #312e81; }
+        .toast-show { transform: translateY(0) !important; opacity: 1 !important; }
+        .pulse-live { animation: pulseLive 2s infinite; }
+        @keyframes pulseLive { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .login-bg {
+            background: linear-gradient(135deg, #0f172a 0%, #14532d 100%);
+            background-attachment: fixed;
         }
-    }
-    function updateAdminUI() {
-        const statusText = document.getElementById('adminStatusText');
-        const icon = document.getElementById('adminIcon');
-        const authBtnText = document.getElementById('authBtnText');
-        const badge = document.getElementById('adminBadge');
-        if (isAdmin) {
-            statusText.textContent = "এডমিন মোড";
-            icon.className = "fa-solid fa-lock-open text-emerald-400";
-            authBtnText.textContent = "লগআউট এডমিন";
-            badge.className = "flex items-center gap-1.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 text-xs px-3 py-1.5 rounded-full font-semibold";
-        } else {
-            statusText.textContent = "ভিউয়ার মোড";
-            icon.className = "fa-solid fa-lock text-amber-400";
-            authBtnText.textContent = "এডমিন লগইন";
-            badge.className = "flex items-center gap-1.5 bg-slate-800 text-amber-300 border border-amber-400/30 text-xs px-3 py-1.5 rounded-full font-semibold";
+        #loginScreen {
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            -webkit-overflow-scrolling: touch;
+            align-items: flex-start !important;
+            padding-top: 1rem !important;
+            padding-bottom: 1.5rem !important;
         }
-    }
-
-    function toggleDarkMode() {
-        const html = document.documentElement;
-        const icon = document.getElementById('themeIcon');
-        if (html.classList.contains('dark')) {
-            html.classList.remove('dark'); html.classList.add('light');
-            icon.className = "fa-solid fa-moon text-base";
-            localStorage.setItem('mess_theme', 'light');
-        } else {
-            html.classList.remove('light'); html.classList.add('dark');
-            icon.className = "fa-solid fa-sun text-base text-amber-400";
-            localStorage.setItem('mess_theme', 'dark');
+        #loginScreen > div { margin: auto; width: 100%; }
+        @media (max-height: 750px) {
+            #loginScreen { padding-top: 0.5rem !important; padding-bottom: 1rem !important; }
+            #loginScreen .login-card { padding: 1rem !important; }
+            #loginScreen .login-logo { width: 3rem; height: 3rem; font-size: 1.5rem; margin-bottom: 0.5rem; }
+            #loginScreen h1 { font-size: 1.25rem; }
+            #loginScreen .login-input { padding: 0.55rem 0.75rem !important; font-size: 0.8rem !important; }
+            #loginScreen .login-btn { padding: 0.65rem !important; font-size: 0.8rem !important; }
+            #loginScreen form { gap: 0.6rem !important; }
+            #loginScreen .bismillah { font-size: 1.15rem; }
+            #loginScreen .bismillah-sub { font-size: 0.6rem; }
         }
-    }
 
-    function switchTab(tabName) {
-        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
-        document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.classList.remove('text-indigo-600', 'dark:text-indigo-400', 'bg-indigo-50', 'dark:bg-indigo-950/60', 'border', 'border-indigo-200', 'dark:border-indigo-800');
-            btn.classList.add('text-slate-600', 'dark:text-slate-400');
-        });
-        document.getElementById(`content-${tabName}`).classList.remove('hidden');
-        const activeBtn = document.getElementById(`tab-${tabName}`);
-        activeBtn.classList.add('text-indigo-600', 'dark:text-indigo-400', 'bg-indigo-50', 'dark:bg-indigo-950/60', 'border', 'border-indigo-200', 'dark:border-indigo-800');
-        activeBtn.classList.remove('text-slate-600', 'dark:text-slate-400');
+        @keyframes palestineGlow {
+            0%, 100% { box-shadow: 0 0 20px rgba(0, 122, 61, 0.6), 0 0 40px rgba(206, 17, 38, 0.4); }
+            50% { box-shadow: 0 0 30px rgba(206, 17, 38, 0.7), 0 0 60px rgba(0, 122, 61, 0.5); }
+        }
+        @keyframes flagWave { 0%, 100% { transform: rotate(-3deg) scale(1); } 50% { transform: rotate(3deg) scale(1.05); } }
+        @keyframes justiceText { 0%, 100% { transform: translateY(0); opacity: 1; } 50% { transform: translateY(-3px); opacity: 0.9; } }
+        @keyframes colorShift {
+            0% { color: #ce1126; text-shadow: 0 0 10px #ce1126; }
+            25% { color: #ffffff; text-shadow: 0 0 10px #ffffff; }
+            50% { color: #007a3d; text-shadow: 0 0 10px #007a3d; }
+            75% { color: #000000; text-shadow: 0 0 10px #888; }
+            100% { color: #ce1126; text-shadow: 0 0 10px #ce1126; }
+        }
+        @keyframes gradientMove { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+        @keyframes justiceFadeIn { from { opacity: 0; transform: scale(0.8) translateY(30px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        .justice-modal {
+            animation: palestineGlow 3s infinite, justiceFadeIn 0.5s ease-out;
+            background: linear-gradient(135deg, #000000 0%, #1a1a1a 50%, #000000 100%);
+            position: relative;
+        }
+        .justice-modal::before {
+            content: '';
+            position: absolute;
+            inset: -3px;
+            border-radius: inherit;
+            padding: 3px;
+            background: linear-gradient(135deg, #ce1126, #ffffff, #007a3d, #000000, #ce1126);
+            background-size: 300% 300%;
+            animation: gradientMove 4s ease infinite;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            z-index: -1;
+        }
+        .palestine-flag { display: inline-block; animation: flagWave 2s ease-in-out infinite; }
+        .justice-text { animation: justiceText 2s ease-in-out infinite; text-shadow: 0 0 10px rgba(255, 215, 0, 0.8), 0 0 20px rgba(255, 215, 0, 0.5); }
+        .colorful-text { animation: colorShift 4s linear infinite; font-weight: 900; letter-spacing: 2px; }
 
-        if (tabName === 'polls') renderPollsTab();
-    }
+        .poll-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+            border-radius: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        .dark .poll-card {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .vote-btn-yes { background: linear-gradient(135deg, #10b981 0%, #059669 100%); transition: all 0.2s; }
+        .vote-btn-yes:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4); }
+        .vote-btn-no { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); transition: all 0.2s; }
+        .vote-btn-no:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4); }
+        .vote-btn-yes.selected { box-shadow: 0 0 0 3px #059669, 0 8px 20px rgba(16, 185, 129, 0.5); }
+        .vote-btn-no.selected { box-shadow: 0 0 0 3px #dc2626, 0 8px 20px rgba(239, 68, 68, 0.5); }
+        .member-row { transition: all 0.15s; border-radius: 14px; }
+        .member-row:hover { background: rgba(99, 102, 241, 0.05); }
+        .date-badge {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+        }
+        .meal-qty-btn { transition: all 0.15s; }
+        .meal-qty-btn.selected {
+            background: #4f46e5;
+            color: white;
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
+        }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 antialiased min-h-screen flex flex-col transition-colors duration-200">
 
-    function getDaysInMonth(yearMonthStr) {
-        const [year, month] = yearMonthStr.split('-').map(Number);
-        return new Date(year, month, 0).getDate();
-    }
-    function getBengaliMonthYear(yearMonthStr) {
-        if (!yearMonthStr) return '-';
-        const [y, m] = yearMonthStr.split('-');
-        return `${bnMonths[m] || m} ${y}`;
-    }
-    function formatBengaliDate(dateStr) {
-        const [y, m, d] = dateStr.split('-').map(Number);
-        const dateObj = new Date(y, m - 1, d);
-        return `${d} ${bnMonths[String(m).padStart(2,'0')]} ${y}, ${bnDays[dateObj.getDay()]}`;
-    }
-    function changeActiveMonth(monthVal) {
-        if (!monthVal) return;
-        selectedMonth = monthVal;
-        document.getElementById('headerMonthText').textContent = getBengaliMonthYear(selectedMonth);
-        renderAll();
-        showToast(`মাস: ${getBengaliMonthYear(selectedMonth)}`);
-    }
-    function goToToday() {
-        const today = new Date().toISOString().slice(0, 10);
-        document.getElementById('pollDatePicker').value = today;
-        renderPollsTab();
-    }
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="fixed inset-0 z-50 flex p-3 sm:p-4 login-bg">
+        <div class="w-full max-w-md mx-auto my-auto">
+            <div class="text-center mb-4 sm:mb-6">
+                <p class="bismillah font-arabic text-amber-300 text-xl sm:text-2xl tracking-widest font-bold drop-shadow mb-1">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</p>
+                <p class="bismillah-sub text-[10px] sm:text-xs text-emerald-300/80">বিসমিল্লাহির রহমানির রহিম</p>
+            </div>
 
-    function calculateStats() {
-        const daysInMonth = getDaysInMonth(selectedMonth);
-        let memberMealTotals = {};
-        let grandTotalMeals = 0;
-        members.forEach(m => memberMealTotals[m.id] = 0);
+            <div class="login-card bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800">
+                <div class="text-center mb-5 sm:mb-6">
+                    <div class="login-logo w-14 h-14 sm:w-16 sm:h-16 bg-emerald-100 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-3 text-2xl sm:text-3xl shadow-inner border border-emerald-300 dark:border-emerald-800">
+                        <i class="fa-solid fa-utensils"></i>
+                    </div>
+                    <h1 class="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">মেস ম্যানেজার</h1>
+                    <p class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 mt-1">আপনার মেসে প্রবেশ করুন বা নতুন মেস তৈরি করুন</p>
+                </div>
 
-        for (let day = 1; day <= daysInMonth; day++) {
-            const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
-            if (mealsData[dateStr]) {
-                members.forEach(m => {
-                    if (mealsData[dateStr][m.id]) {
-                        const { m: morning = 0, l: noon = 0, d: night = 0 } = mealsData[dateStr][m.id];
-                        const sum = (Number(morning) || 0) + (Number(noon) || 0) + (Number(night) || 0);
-                        memberMealTotals[m.id] += sum;
-                        grandTotalMeals += sum;
-                    }
-                });
+                <div class="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mb-4 sm:mb-5">
+                    <button onclick="showLoginTab('join')" id="tabLoginJoin" class="flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition bg-white dark:bg-slate-900 text-emerald-600 shadow-sm">
+                        <i class="fa-solid fa-right-to-bracket mr-1"></i> মেসে প্রবেশ
+                    </button>
+                    <button onclick="showLoginTab('create')" id="tabLoginCreate" class="flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition text-slate-600 dark:text-slate-400">
+                        <i class="fa-solid fa-plus mr-1"></i> নতুন মেস
+                    </button>
+                </div>
+
+                <form id="joinForm" onsubmit="handleJoinMess(event)" class="space-y-3 sm:space-y-4">
+                    <div>
+                        <label class="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            <i class="fa-solid fa-hashtag text-emerald-600 mr-1"></i> Mess ID
+                        </label>
+                        <input type="text" id="joinMessId" placeholder="যেমন: dhanmondi-paradise" required 
+                            class="login-input w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-sm font-mono focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            <i class="fa-solid fa-key text-emerald-600 mr-1"></i> View Password
+                        </label>
+                        <input type="password" id="joinPassword" placeholder="মেসের কমন পাসওয়ার্ড" required 
+                            class="login-input w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-sm focus:ring-2 focus:ring-emerald-500">
+                    </div>
+                    <button type="submit" class="login-btn w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 sm:py-3 rounded-xl text-sm shadow-lg transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-right-to-bracket"></i> <span>মেসে প্রবেশ করুন</span>
+                    </button>
+                </form>
+
+                <form id="createForm" onsubmit="handleCreateMess(event)" class="space-y-3 sm:space-y-4 hidden">
+                    <div>
+                        <label class="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            <i class="fa-solid fa-hashtag text-indigo-600 mr-1"></i> নতুন Mess ID
+                        </label>
+                        <input type="text" id="createMessId" placeholder="যেমন: karim-mess-2026" required pattern="[a-z0-9\-]{3,30}"
+                            class="login-input w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-sm font-mono focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            <i class="fa-solid fa-house text-indigo-600 mr-1"></i> মেসের নাম
+                        </label>
+                        <input type="text" id="createMessName" placeholder="ধানমন্ডি প্যারাডাইস মেস" required 
+                            class="login-input w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-sm focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            <i class="fa-solid fa-users text-indigo-600 mr-1"></i> View Password
+                        </label>
+                        <input type="text" id="createViewPassword" placeholder="mess2026" required minlength="3"
+                            class="login-input w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-sm font-mono focus:ring-2 focus:ring-indigo-500">
+                    </div>
+                    <div>
+                        <label class="block text-[11px] sm:text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                            <i class="fa-solid fa-shield-halved text-rose-600 mr-1"></i> Admin Password
+                        </label>
+                        <input type="text" id="createAdminPassword" placeholder="mySecret123" required minlength="4"
+                            class="login-input w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-sm font-mono focus:ring-2 focus:ring-rose-500">
+                    </div>
+                    <button type="submit" class="login-btn w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 sm:py-3 rounded-xl text-sm shadow-lg transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> <span>নতুন মেস তৈরি করুন</span>
+                    </button>
+                </form>
+
+                <div id="loginError" class="hidden mt-3 sm:mt-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-xl text-[11px] sm:text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                    <i class="fa-solid fa-circle-exclamation mt-0.5"></i> <span id="loginErrorMsg"></span>
+                </div>
+
+                <div id="firebaseStatus" class="mt-3 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-[10px] text-slate-500 dark:text-slate-400 text-center font-mono">
+                    <i class="fa-solid fa-circle text-amber-400 text-[8px] mr-1"></i>
+                    <span id="fbStatusText">Firebase সংযোগ চেক হচ্ছে...</span>
+                </div>
+            </div>
+
+            <p class="text-center text-[10px] sm:text-xs text-slate-400 dark:text-slate-500 mt-4 sm:mt-6 pb-2">
+                <i class="fa-solid fa-shield-halved mr-1"></i> প্রতিটি মেসের ডাটা আলাদা ও সুরক্ষিত
+            </p>
+        </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="mainApp" class="hidden min-h-screen flex flex-col">
+        <header class="bg-slate-900 text-white shadow-xl sticky top-0 z-40 border-b border-slate-800">
+            <div class="bg-gradient-to-r from-emerald-950 via-slate-950 to-emerald-950 border-b border-emerald-900/60 py-2 px-4 text-center">
+                <p class="font-arabic text-amber-300 text-lg sm:text-xl tracking-widest font-bold drop-shadow select-none">بِسْمِ ٱللَّٰهِ ٱلرَّحْمَٰنِ ٱلرَّحِيمِ</p>
+                <p class="text-[11px] text-emerald-300/80 font-medium tracking-wider">বিসমিল্লাহির রহমানির রহিম — মেস মিল ও বাজার হিসাব ম্যানেজার</p>
+            </div>
+
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap justify-between items-center gap-3">
+                <div class="flex items-center space-x-3 space-x-reverse">
+                    <div class="bg-emerald-600 p-2.5 rounded-xl shadow-md flex items-center justify-center">
+                        <i class="fa-solid fa-utensils text-xl text-amber-300"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight"><span id="headerMessName">মেস মিল ও হিসাব সিস্টেম</span></h1>
+                        <p class="text-xs text-emerald-300 font-medium flex items-center gap-1.5">
+                            <i class="fa-solid fa-calendar-days text-amber-400"></i>
+                            <span>চলতি মাস: <strong id="headerMonthText" class="text-white font-bold">-</strong></span>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap">
+                    <div id="syncBadge" class="flex items-center gap-1.5 bg-slate-800 text-slate-300 border border-slate-700 text-xs px-2.5 py-1.5 rounded-full font-semibold">
+                        <i class="fa-solid fa-cloud text-slate-400" id="syncIcon"></i>
+                        <span id="syncText" class="hidden sm:inline">সংযোগ...</span>
+                    </div>
+                    <button onclick="toggleDarkMode()" class="bg-slate-800 hover:bg-slate-700 text-amber-300 p-2 rounded-lg text-xs transition border border-slate-700 shadow-sm">
+                        <i class="fa-solid fa-moon text-base" id="themeIcon"></i>
+                    </button>
+                    <div id="adminBadge" class="flex items-center gap-1.5 bg-slate-800 text-amber-300 border border-amber-400/30 text-xs px-3 py-1.5 rounded-full font-semibold">
+                        <i class="fa-solid fa-lock text-amber-400" id="adminIcon"></i>
+                        <span id="adminStatusText">ভিউয়ার মোড</span>
+                    </div>
+                    <button id="authBtn" onclick="toggleAdminAuth()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold px-3.5 py-1.5 rounded-lg text-xs shadow transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-key"></i> <span id="authBtnText">এডমিন লগইন</span>
+                    </button>
+                    <button onclick="logoutFromMess()" class="bg-rose-600 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded-lg text-xs shadow transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-right-from-bracket"></i> <span class="hidden sm:inline">বের হন</span>
+                    </button>
+                    <button onclick="exportToCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-3 py-1.5 rounded-lg text-xs shadow transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-excel"></i> <span class="hidden sm:inline">CSV</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-slate-950/50 border-t border-slate-800 py-1.5 px-4 text-center">
+                <span class="text-[10px] text-emerald-300 font-mono">
+                    <i class="fa-solid fa-hashtag mr-1"></i>Mess ID: <strong id="headerMessId" class="text-amber-300">-</strong>
+                </span>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-grow w-full">
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-bowl-rice"></i></div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">মোট মেস মিল</p>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100" id="totalMessMeals">0.0</h3>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">মোট জমা</p>
+                        <h3 class="text-xl font-bold text-emerald-600 dark:text-emerald-400">৳<span id="totalMessDeposit">0</span></h3>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-cart-shopping"></i></div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">মোট বাজার</p>
+                        <h3 class="text-xl font-bold text-slate-800 dark:text-slate-100">৳<span id="totalMessBazar">0</span></h3>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 shadow-sm border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                    <div class="w-11 h-11 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center text-lg shrink-0"><i class="fa-solid fa-calculator"></i></div>
+                    <div>
+                        <p class="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">মিল রেট</p>
+                        <h3 class="text-xl font-bold text-amber-600 dark:text-amber-400">৳<span id="currentMealRate">0.00</span></h3>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex overflow-x-auto border-b border-slate-200 dark:border-slate-800 mb-6 bg-white dark:bg-slate-900 p-1.5 rounded-2xl shadow-sm space-x-1 sm:space-x-2">
+                <button onclick="switchTab('sheet')" id="tab-sheet" class="tab-btn flex-1 py-2.5 px-3 rounded-xl font-semibold text-xs sm:text-sm transition text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 flex items-center justify-center gap-2 shrink-0">
+                    <i class="fa-solid fa-table-cells"></i><span>মিল শীট</span>
+                </button>
+                <button onclick="switchTab('polls')" id="tab-polls" class="tab-btn flex-1 py-2.5 px-3 rounded-xl font-semibold text-xs sm:text-sm transition text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 shrink-0">
+                    <i class="fa-solid fa-check-to-slot text-purple-500"></i><span>দৈনিক ভোট</span>
+                </button>
+                <button onclick="switchTab('members')" id="tab-members" class="tab-btn flex-1 py-2.5 px-3 rounded-xl font-semibold text-xs sm:text-sm transition text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 shrink-0">
+                    <i class="fa-solid fa-users text-indigo-500"></i><span>মেম্বার</span>
+                </button>
+                <button onclick="switchTab('schedule')" id="tab-schedule" class="tab-btn flex-1 py-2.5 px-3 rounded-xl font-semibold text-xs sm:text-sm transition text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 shrink-0">
+                    <i class="fa-solid fa-toggle-off text-indigo-500"></i><span>অটো-অফ</span>
+                </button>
+                <button onclick="switchTab('deposit')" id="tab-deposit" class="tab-btn flex-1 py-2.5 px-3 rounded-xl font-semibold text-xs sm:text-sm transition text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 shrink-0">
+                    <i class="fa-solid fa-wallet text-emerald-600"></i><span>জমা</span>
+                </button>
+                <button onclick="switchTab('bazar')" id="tab-bazar" class="tab-btn flex-1 py-2.5 px-3 rounded-xl font-semibold text-xs sm:text-sm transition text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 shrink-0">
+                    <i class="fa-solid fa-basket-shopping text-rose-500"></i><span>বাজার</span>
+                </button>
+                <button onclick="switchTab('summary')" id="tab-summary" class="tab-btn flex-1 py-2.5 px-3 rounded-xl font-semibold text-xs sm:text-sm transition text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex items-center justify-center gap-2 shrink-0">
+                    <i class="fa-solid fa-chart-pie text-amber-500"></i><span>সারসংক্ষেপ</span>
+                </button>
+            </div>
+
+            <!-- MEAL SHEET -->
+            <section id="content-sheet" class="tab-content">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden mb-6">
+                    <div class="p-4 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800 flex flex-wrap justify-between items-center gap-3">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">মাস:</span>
+                            <input type="month" id="monthPicker" class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-xs sm:text-sm rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 font-semibold" onchange="changeActiveMonth(this.value)">
+                        </div>
+                        <button onclick="requireAdmin(openAddMemberModal)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-3.5 py-2 rounded-lg transition flex items-center gap-1.5 shadow-sm">
+                            <i class="fa-solid fa-plus"></i><span>নতুন মেম্বার</span>
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto excel-scroll relative max-h-[620px]">
+                        <table class="w-full text-xs text-left border-collapse">
+                            <thead class="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-100 dark:bg-slate-800 sticky top-0 z-20 shadow-sm">
+                                <tr id="tableHeader"></tr>
+                            </thead>
+                            <tbody id="mealTableBody" class="divide-y divide-slate-200 dark:divide-slate-800 bg-white dark:bg-slate-900"></tbody>
+                            <tfoot id="mealTableFoot" class="bg-indigo-50/80 dark:bg-slate-800 font-semibold text-slate-800 dark:text-slate-100 sticky bottom-0 z-10 border-t-2 border-indigo-200 dark:border-slate-700"></tfoot>
+                        </table>
+                    </div>
+                </div>
+                <div class="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 rounded-xl p-3 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between flex-wrap gap-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-lightbulb text-amber-500 text-base"></i>
+                        <span><strong>নির্দেশনা:</strong> ভোট দিলে মিল শীটে অটো বসে যাবে।</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 🗳️ DAILY POLLS -->
+            <section id="content-polls" class="tab-content hidden">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 shadow-sm border border-slate-200 dark:border-slate-800 mb-4">
+                    <div class="flex flex-wrap justify-between items-center gap-3">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                                <i class="fa-solid fa-square-poll-vertical text-purple-600"></i>
+                                <span>দৈনিক মিল ভোট পোল</span>
+                            </h2>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">🔒 শুধু এডমিন ভোট দিতে পারবে</p>
+                        </div>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <label class="text-xs font-semibold text-slate-600 dark:text-slate-400">তারিখ:</label>
+                            <input type="date" id="pollDatePicker" class="border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-1.5 text-xs font-semibold focus:ring-2 focus:ring-purple-500" onchange="renderPollsTab()">
+                            <button onclick="goToToday()" class="bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-300 dark:border-purple-800 px-3 py-1.5 rounded-lg text-xs font-bold hover:bg-purple-200 transition">
+                                <i class="fa-solid fa-calendar-day mr-1"></i> আজ
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="pollsContainer" class="space-y-4"></div>
+            </section>
+
+            <!-- MEMBERS -->
+            <section id="content-members" class="tab-content hidden">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
+                    <div class="flex flex-wrap justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4 mb-6 gap-3">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                                <i class="fa-solid fa-users text-indigo-600"></i><span>মেম্বার তালিকা</span>
+                            </h2>
+                        </div>
+                        <button onclick="requireAdmin(openAddMemberModal)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow transition flex items-center gap-2">
+                            <i class="fa-solid fa-user-plus"></i><span>নতুন মেম্বার</span>
+                        </button>
+                    </div>
+                    <div id="membersGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+            </section>
+
+            <!-- SCHEDULE -->
+            <section id="content-schedule" class="tab-content hidden">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
+                    <div class="border-b border-slate-100 dark:border-slate-800 pb-4 mb-6">
+                        <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                            <i class="fa-solid fa-calendar-xmark text-indigo-600"></i><span>মিল অটো-অফ</span>
+                        </h2>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left border-collapse">
+                            <thead class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase font-semibold">
+                                <tr>
+                                    <th class="p-3.5 border border-slate-200 dark:border-slate-800">মেম্বার</th>
+                                    <th class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">সকাল</th>
+                                    <th class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">দুপুর</th>
+                                    <th class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">রাত</th>
+                                    <th class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">অ্যাকশন</th>
+                                </tr>
+                            </thead>
+                            <tbody id="scheduleTableBody" class="divide-y divide-slate-200 dark:divide-slate-800"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- DEPOSIT -->
+            <section id="content-deposit" class="tab-content hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 h-fit">
+                        <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-hand-holding-dollar text-emerald-600"></i><span>নতুন জমা</span>
+                        </h2>
+                        <form id="depositForm" onsubmit="handleAddDeposit(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">তারিখ</label>
+                                <input type="date" id="depositDate" required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">মেম্বার</label>
+                                <select id="depositMemberSelect" required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500"></select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">পরিমাণ (৳)</label>
+                                <input type="number" step="0.01" id="depositAmount" placeholder="৩০০০" required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 font-bold text-emerald-600">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">নোট</label>
+                                <input type="text" id="depositNote" placeholder="বিকাশ / ক্যাশ" class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-lg text-xs shadow transition flex items-center justify-center gap-1.5">
+                                <i class="fa-solid fa-plus-circle"></i><span>জমা সেভ</span>
+                            </button>
+                        </form>
+                    </div>
+                    <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                        <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center justify-between">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-receipt text-emerald-600"></i><span>জমার ইতিহাস</span></span>
+                            <span class="text-xs bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 font-bold px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">মোট: ৳<span id="depositTotalSum">0</span></span>
+                        </h2>
+                        <div class="overflow-x-auto max-h-[450px]">
+                            <table class="w-full text-xs text-left">
+                                <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase sticky top-0">
+                                    <tr>
+                                        <th class="p-3">তারিখ</th>
+                                        <th class="p-3">মেম্বার</th>
+                                        <th class="p-3">বিবরণ</th>
+                                        <th class="p-3 text-right">৳</th>
+                                        <th class="p-3 text-center">অ্যাকশন</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="depositListTable" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- BAZAR -->
+            <section id="content-bazar" class="tab-content hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800 h-fit">
+                        <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+                            <i class="fa-solid fa-cart-plus text-rose-500"></i><span>বাজার খরচ</span>
+                        </h2>
+                        <form id="bazarForm" onsubmit="handleAddBazar(event)" class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">তারিখ</label>
+                                <input type="date" id="bazarDate" required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">মেম্বার</label>
+                                <select id="bazarMemberSelect" required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500"></select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">ক্যাটাগরি</label>
+                                <input type="text" id="bazarCategory" placeholder="গ্যাস, চাল/ডাল..." required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 font-semibold text-indigo-600 dark:text-indigo-400">
+                                <div class="flex flex-wrap gap-1.5 mt-2">
+                                    <button type="button" onclick="setCategorySuggestion('গ্যাস সিলিন্ডার')" class="text-[10px] bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 px-2 py-0.5 rounded-md hover:bg-amber-100 transition">গ্যাস</button>
+                                    <button type="button" onclick="setCategorySuggestion('চাল/ডাল/তেল')" class="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md hover:bg-slate-200 transition">চাল/ডাল</button>
+                                    <button type="button" onclick="setCategorySuggestion('মাছ ও মাংস')" class="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md hover:bg-slate-200 transition">মাছ/মাংস</button>
+                                    <button type="button" onclick="setCategorySuggestion('সবজি')" class="text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded-md hover:bg-slate-200 transition">সবজি</button>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">পরিমাণ (৳)</label>
+                                <input type="number" step="0.01" id="bazarAmount" placeholder="১৫৫০" required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 font-bold text-rose-600">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">বিবরণ</label>
+                                <input type="text" id="bazarNote" placeholder="১২কেজি সিলিন্ডার" class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <button type="submit" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 rounded-lg text-xs shadow transition">বাজার সেভ</button>
+                        </form>
+                    </div>
+                    <div class="lg:col-span-2 bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-sm border border-slate-200 dark:border-slate-800">
+                        <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center justify-between">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-list-check text-rose-500"></i><span>চলতি মাসের বাজার</span></span>
+                            <span class="text-xs bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 font-bold px-2.5 py-1 rounded-full border border-rose-200 dark:border-rose-800">মোট: ৳<span id="bazarTotalSum">0</span></span>
+                        </h2>
+                        <div class="overflow-x-auto max-h-[450px]">
+                            <table class="w-full text-xs text-left">
+                                <thead class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase sticky top-0">
+                                    <tr>
+                                        <th class="p-3">তারিখ</th>
+                                        <th class="p-3">মেম্বার</th>
+                                        <th class="p-3">ক্যাটাগরি</th>
+                                        <th class="p-3">বিবরণ</th>
+                                        <th class="p-3 text-right">৳</th>
+                                        <th class="p-3 text-center">অ্যাকশন</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bazarListTable" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- SUMMARY -->
+            <section id="content-summary" class="tab-content hidden">
+                <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-sm border border-slate-200 dark:border-slate-800">
+                    <div class="flex flex-wrap justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4 mb-6 gap-3">
+                        <div>
+                            <h2 class="text-lg font-bold text-slate-800 dark:text-slate-100">চূড়ান্ত হিসাব</h2>
+                            <p class="text-xs text-slate-500 dark:text-slate-400">কে টাকা পাবে বা দিবে</p>
+                        </div>
+                        <button onclick="window.print()" class="bg-slate-800 hover:bg-slate-700 text-white font-medium text-xs px-3.5 py-2 rounded-xl transition">
+                            <i class="fa-solid fa-print mr-1.5"></i> প্রিন্ট
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs text-left">
+                            <thead class="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase font-semibold">
+                                <tr>
+                                    <th class="p-3.5">মেম্বার</th>
+                                    <th class="p-3.5 text-center">মোট মিল</th>
+                                    <th class="p-3.5 text-right">মিল খরচ (৳)</th>
+                                    <th class="p-3.5 text-right">জমা (৳)</th>
+                                    <th class="p-3.5 text-right font-bold">ব্যালেন্স</th>
+                                </tr>
+                            </thead>
+                            <tbody id="summaryTableBody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- ADMIN MODAL -->
+    <div id="adminModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-slate-100 dark:border-slate-800">
+            <div class="text-center mb-5">
+                <div class="w-12 h-12 bg-amber-100 dark:bg-amber-950 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-2 text-xl shadow-inner"><i class="fa-solid fa-shield-halved"></i></div>
+                <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100">এডমিন পাসওয়ার্ড</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">ভোট দিতে ও ডাটা এডিট করতে এই পাসওয়ার্ড দিন</p>
+            </div>
+            <div class="space-y-4">
+                <input type="password" id="adminPinInput" class="w-full text-center text-xl tracking-widest border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-xl py-2.5 focus:ring-2 focus:ring-indigo-500 font-bold text-slate-800 dark:text-slate-100 font-mono" placeholder="••••••••">
+                <div class="flex gap-2">
+                    <button onclick="closeAdminModal()" class="w-1/2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold py-2.5 rounded-xl text-xs">বাতিল</button>
+                    <button onclick="verifyAdminPin()" class="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-xs shadow">লগইন</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VOTE + MEAL QUANTITY MODAL -->
+    <div id="voteQtyModal" class="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-[150] flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 w-full max-w-sm shadow-2xl border border-slate-100 dark:border-slate-800">
+            <div class="text-center mb-5">
+                <div class="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2 text-2xl shadow-inner" id="voteQtyIconWrap">
+                    <i class="fa-solid fa-check" id="voteQtyIcon"></i>
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 dark:text-slate-100" id="voteQtyTitle">ভোট দিন</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1" id="voteQtySubtitle">মিল সংখ্যা সিলেক্ট করুন</p>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+                    <i class="fa-solid fa-bowl-rice text-indigo-600 mr-1"></i> কত মিল?
+                </label>
+                <div class="grid grid-cols-6 gap-1.5">
+                    <button type="button" onclick="selectQty(event, 0.25)" class="meal-qty-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg py-2 text-xs font-bold">0.25</button>
+                    <button type="button" onclick="selectQty(event, 0.5)" class="meal-qty-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg py-2 text-xs font-bold">0.5</button>
+                    <button type="button" onclick="selectQty(event, 0.75)" class="meal-qty-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg py-2 text-xs font-bold">0.75</button>
+                    <button type="button" onclick="selectQty(event, 1)" class="meal-qty-btn selected bg-indigo-600 text-white border border-indigo-600 rounded-lg py-2 text-xs font-bold">1</button>
+                    <button type="button" onclick="selectQty(event, 1.5)" class="meal-qty-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg py-2 text-xs font-bold">1.5</button>
+                    <button type="button" onclick="selectQty(event, 2)" class="meal-qty-btn bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-lg py-2 text-xs font-bold">2</button>
+                </div>
+                <div class="mt-2">
+                    <label class="block text-[10px] font-semibold text-slate-500 dark:text-slate-400 mb-1">অথবা নিজে টাইপ করুন:</label>
+                    <input type="number" step="0.25" min="0" id="voteQtyInput" value="1" class="w-full text-center text-xl font-extrabold border-2 border-indigo-500 rounded-xl py-2 text-indigo-600 dark:text-indigo-400 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <div class="flex gap-2 pt-2">
+                <button onclick="closeVoteQtyModal()" class="w-1/3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold py-2.5 rounded-xl text-xs">বাতিল</button>
+                <button onclick="confirmVoteWithQty()" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs shadow flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-check-circle"></i>
+                    <span>ভোট কনফার্ম</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT DEPOSIT MODAL -->
+    <div id="editDepositModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-slate-100 dark:border-slate-800">
+            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><i class="fa-solid fa-pen-to-square text-emerald-600"></i><span>জমা এডিট</span></h3>
+            <div class="space-y-4">
+                <input type="hidden" id="editDepositId">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">তারিখ</label>
+                    <input type="date" id="editDepositDate" required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">মেম্বার</label>
+                    <select id="editDepositMemberSelect" required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500"></select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">পরিমাণ (৳)</label>
+                    <input type="number" step="0.01" id="editDepositAmount" required class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 font-bold text-emerald-600">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">নোট</label>
+                    <input type="text" id="editDepositNote" class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button onclick="closeEditDepositModal()" class="w-1/2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold py-2.5 rounded-xl text-xs">বাতিল</button>
+                    <button onclick="saveEditDeposit()" class="w-1/2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded-xl text-xs shadow">আপডেট</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MEMBER MODAL -->
+    <div id="memberModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-slate-100 dark:border-slate-800">
+            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><i class="fa-solid fa-user-plus text-indigo-600"></i><span id="memberModalTitle">নতুন মেম্বার</span></h3>
+            <div class="space-y-4">
+                <input type="hidden" id="editMemberId">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">নাম *</label>
+                    <input type="text" id="newMemberName" placeholder="রহিম আহমেদ" class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 font-medium text-slate-800 dark:text-slate-100">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">ফোন</label>
+                    <input type="text" id="newMemberPhone" placeholder="01700000000" class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">ব্যাজ কালার</label>
+                    <select id="newMemberColor" class="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-indigo-500 font-semibold text-indigo-600">
+                        <option value="bg-indigo-600">ইন্ডিগো</option>
+                        <option value="bg-emerald-600">সবুজ</option>
+                        <option value="bg-rose-600">লাল</option>
+                        <option value="bg-amber-600">হলুদ</option>
+                        <option value="bg-purple-600">বেগুনি</option>
+                        <option value="bg-teal-600">টিল</option>
+                    </select>
+                </div>
+                <div class="flex gap-2 pt-2">
+                    <button onclick="closeMemberModal()" class="w-1/2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold py-2.5 rounded-xl text-xs">বাতিল</button>
+                    <button onclick="saveMember()" class="w-1/2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-xl text-xs shadow">সেভ</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JUSTICE POPUP -->
+    <div id="justiceModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 hidden" style="background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);">
+        <div class="justice-modal rounded-3xl p-6 sm:p-8 w-full max-w-md text-center relative">
+            <div class="palestine-flag mb-4 text-6xl">🇵🇸</div>
+            <h2 class="colorful-text text-3xl sm:text-4xl mb-2">FREE PALESTINE</h2>
+            <p class="text-white text-sm sm:text-base mb-4 opacity-90">ফিলিস্তিন মুক্ত হোক 🇵🇸</p>
+            <div class="flex items-center justify-center gap-2 my-4">
+                <div class="h-0.5 w-12 bg-gradient-to-r from-transparent to-red-500"></div>
+                <span class="text-white text-xl">✊</span>
+                <div class="h-0.5 w-12 bg-gradient-to-l from-transparent to-green-500"></div>
+            </div>
+            <h2 class="justice-text text-3xl sm:text-4xl font-black text-amber-400 mb-2">JUSTICE FOR HADI</h2>
+            <p class="text-white text-sm sm:text-base mb-6 opacity-90">হাদির জন্য ন্যায়বিচার চাই ⚖️</p>
+            <div class="flex items-center justify-center gap-3 mb-6 text-2xl">
+                <span class="palestine-flag">🇵🇸</span>
+                <span class="justice-text">✊</span>
+                <span class="palestine-flag" style="animation-delay: 0.3s;">🇵🇸</span>
+                <span class="justice-text" style="animation-delay: 0.6s;">⚖️</span>
+                <span class="palestine-flag" style="animation-delay: 0.9s;">🇵🇸</span>
+            </div>
+            <button onclick="closeJusticeModal()" class="w-full bg-gradient-to-r from-green-600 via-white to-red-600 text-black font-black py-3 rounded-xl text-sm shadow-lg hover:scale-105 transition-transform duration-200 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-hand-fist text-black"></i>
+                <span>আমরা সমর্থন জানাই</span>
+                <i class="fa-solid fa-hand-fist text-black"></i>
+            </button>
+            <p class="text-slate-400 text-[10px] mt-4 font-mono">✊ Solidarity forever ✊</p>
+        </div>
+    </div>
+
+    <!-- TOAST -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white text-xs px-4 py-3 rounded-xl shadow-xl flex items-center gap-2.5 transform translate-y-20 opacity-0 transition-all duration-300 z-50 border border-slate-800">
+        <i class="fa-solid fa-circle-check text-emerald-400 text-base" id="toastIcon"></i>
+        <span id="toastMsg">সফল!</span>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <script>
+        // FIREBASE CONFIG
+        const firebaseConfig = {
+            apiKey: "AIzaSyA6c69hOzq8eauL3lQoY2QkCKXm47RD09E",
+            authDomain: "multiple-mass.firebaseapp.com",
+            databaseURL: "https://multiple-mass-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "multiple-mass",
+            storageBucket: "multiple-mass.firebasestorage.app",
+            messagingSenderId: "1042463319969",
+            appId: "1:1042463319969:web:254ebce8ef503ecacecde0",
+            measurementId: "G-57SY5V1XKD"
+        };
+
+        let db = null;
+        let firebaseReady = false;
+        let firebaseErrorMsg = '';
+
+        function updateFirebaseStatus(status, msg) {
+            const statusEl = document.getElementById('fbStatusText');
+            const iconEl = document.querySelector('#firebaseStatus i');
+            if (!statusEl) return;
+            statusEl.textContent = msg;
+            if (iconEl) {
+                if (status === 'ok') iconEl.className = 'fa-solid fa-circle text-emerald-400 text-[8px] mr-1';
+                else if (status === 'error') iconEl.className = 'fa-solid fa-circle text-rose-400 text-[8px] mr-1';
+                else iconEl.className = 'fa-solid fa-circle text-amber-400 text-[8px] mr-1';
             }
         }
 
-        let memberDepositTotals = {};
-        let grandTotalDeposit = 0;
-        members.forEach(m => memberDepositTotals[m.id] = 0);
-        depositData.filter(item => item.date && item.date.startsWith(selectedMonth)).forEach(item => {
-            const amt = Number(item.amount) || 0;
-            if (memberDepositTotals[item.memberId] !== undefined) memberDepositTotals[item.memberId] += amt;
-            grandTotalDeposit += amt;
-        });
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.database();
+            firebaseReady = true;
+            updateFirebaseStatus('ok', 'Firebase সংযুক্ত ✓');
+            db.ref('.info/connected').on('value', (snap) => {
+                if (snap.val() === true) updateFirebaseStatus('ok', 'Firebase সংযুক্ত ✓');
+                else updateFirebaseStatus('pending', 'Firebase সংযোগ বিচ্ছিন্ন');
+            });
+        } catch (e) {
+            firebaseReady = false;
+            firebaseErrorMsg = e.message;
+            updateFirebaseStatus('error', 'Firebase init ব্যর্থ');
+        }
 
-        let grandTotalBazar = 0;
-        bazarData.filter(item => item.date && item.date.startsWith(selectedMonth)).forEach(item => {
-            grandTotalBazar += (Number(item.amount) || 0);
-        });
+        // APP STATE
+        let currentMessId = null;
+        let currentMessMeta = null;
+        let isAdmin = false;
+        let pendingAdminCallback = null;
+        let isRemoteUpdate = false;
+        let currentListenerRef = null;
 
-        const mealRate = grandTotalMeals > 0 ? (grandTotalBazar / grandTotalMeals) : 0;
-        return { daysInMonth, memberMealTotals, grandTotalMeals, memberDepositTotals, grandTotalDeposit, grandTotalBazar, mealRate };
-    }
+        let messDetails = { name: "মেস মিল ও হিসাব সিস্টেম" };
+        let selectedMonth = new Date().toISOString().slice(0, 7);
+        let members = [];
+        let mealsData = {};
+        let depositData = [];
+        let bazarData = [];
+        let polls = {};
 
-    function renderAll() {
-        renderMealSheet();
-        renderMembersDirectory();
-        renderScheduleTab();
-        renderPollsTab();
-        renderDepositTab();
-        renderBazarTab();
-        renderSummaryTab();
-        updateTopMetrics();
-    }
+        let pendingVote = null;
 
-    function updateTopMetrics() {
-        const stats = calculateStats();
-        document.getElementById('totalMessMeals').textContent = stats.grandTotalMeals.toFixed(2);
-        document.getElementById('totalMessDeposit').textContent = stats.grandTotalDeposit.toLocaleString('bn-BD');
-        document.getElementById('totalMessBazar').textContent = stats.grandTotalBazar.toLocaleString('bn-BD');
-        document.getElementById('currentMealRate').textContent = stats.mealRate.toFixed(2);
-    }
+        const bnMonths = {
+            "01": "জানুয়ারি", "02": "ফেব্রুয়ারি", "03": "মার্চ", "04": "এপ্রিল",
+            "05": "মে", "06": "জুন", "07": "জুলাই", "08": "আগস্ট",
+            "09": "সেপ্টেম্বর", "10": "অক্টোবর", "11": "নভেম্বর", "12": "ডিসেম্বর"
+        };
+        const bnDays = ["রবিবার", "সোমবার", "মঙ্গলবার", "বুধবার", "বৃহস্পতিবার", "শুক্রবার", "শনিবার"];
 
-    function setCategorySuggestion(name) { document.getElementById('bazarCategory').value = name; }
+        function showJusticeModal() { const m = document.getElementById('justiceModal'); if (m) m.classList.remove('hidden'); }
+        function closeJusticeModal() { const m = document.getElementById('justiceModal'); if (m) m.classList.add('hidden'); }
 
-    // MEAL SHEET
-    function renderMealSheet() {
-        const stats = calculateStats();
-        const daysCount = stats.daysInMonth;
-        const headerRow = document.getElementById('tableHeader');
-        let headerHTML = `<th class="p-3 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-100 dark:bg-slate-800 z-30 min-w-[120px]">তারিখ</th>`;
+        window.onload = function() {
+            if (localStorage.getItem('mess_theme') === 'dark') {
+                document.documentElement.classList.add('dark');
+                const icon = document.getElementById('themeIcon');
+                if (icon) icon.className = "fa-solid fa-sun text-base text-amber-400";
+            }
 
-        members.forEach(member => {
-            const totalM = stats.memberMealTotals[member.id] || 0;
-            const initials = (member.name || '?').trim().charAt(0);
-            headerHTML += `
-                <th class="p-2 border border-slate-200 dark:border-slate-800 text-center min-w-[135px] bg-slate-100 dark:bg-slate-800/80">
-                    <div class="flex flex-col items-center justify-center gap-1 py-1">
-                        <div class="w-7 h-7 rounded-full ${member.color || 'bg-indigo-600'} text-white font-bold flex items-center justify-center text-xs shadow-sm">${initials}</div>
-                        <span class="font-bold text-slate-800 dark:text-slate-100 text-xs truncate max-w-[120px]">${member.name}</span>
-                        <span class="text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-extrabold px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">মোট: ${totalM.toFixed(2)}</span>
-                    </div>
-                </th>`;
-        });
+            const pdp = document.getElementById('pollDatePicker');
+            if (pdp) pdp.value = new Date().toISOString().slice(0, 10);
 
-        headerHTML += `<th class="p-3 border border-slate-200 dark:border-slate-800 text-center min-w-[110px] bg-indigo-100/70 dark:bg-indigo-950/80 font-bold text-indigo-900 dark:text-indigo-200">দৈনিক মোট</th>`;
-        headerRow.innerHTML = headerHTML;
+            const savedMessId = localStorage.getItem('current_mess_id');
+            const savedViewPwd = localStorage.getItem('current_mess_viewpwd');
+            const savedAdminPwd = localStorage.getItem('current_mess_adminpwd');
+            const savedIsAdmin = localStorage.getItem('current_mess_isadmin') === 'true';
 
-        const tbody = document.getElementById('mealTableBody');
-        let bodyHTML = '';
-        for (let day = 1; day <= daysCount; day++) {
-            const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
-            let dailyTotalMealSum = 0;
-            bodyHTML += `<tr>`;
-            bodyHTML += `<td class="p-2 font-semibold text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm text-center"><span class="text-xs font-bold">${day}</span></td>`;
+            if (savedMessId && savedViewPwd && firebaseReady) {
+                attemptJoinMess(savedMessId, savedViewPwd, savedAdminPwd, savedIsAdmin, true);
+            } else {
+                showLoginScreen();
+            }
+
+            setTimeout(() => showJusticeModal(), 800);
+        };
+
+        function showLoginScreen() {
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+        }
+        function showMainApp() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+        }
+        function showLoginTab(tab) {
+            const joinTab = document.getElementById('tabLoginJoin');
+            const createTab = document.getElementById('tabLoginCreate');
+            const joinForm = document.getElementById('joinForm');
+            const createForm = document.getElementById('createForm');
+            if (tab === 'join') {
+                joinTab.className = "flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition bg-white dark:bg-slate-900 text-emerald-600 shadow-sm";
+                createTab.className = "flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition text-slate-600 dark:text-slate-400";
+                joinForm.classList.remove('hidden');
+                createForm.classList.add('hidden');
+            } else {
+                createTab.className = "flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition bg-white dark:bg-slate-900 text-indigo-600 shadow-sm";
+                joinTab.className = "flex-1 py-2 rounded-lg text-[11px] sm:text-xs font-bold transition text-slate-600 dark:text-slate-400";
+                createForm.classList.remove('hidden');
+                joinForm.classList.add('hidden');
+            }
+            hideLoginError();
+        }
+        function showLoginError(msg) {
+            const box = document.getElementById('loginError');
+            document.getElementById('loginErrorMsg').textContent = msg;
+            box.classList.remove('hidden');
+            setTimeout(() => box.classList.add('hidden'), 10000);
+        }
+        function hideLoginError() { document.getElementById('loginError').classList.add('hidden'); }
+
+        function handleJoinMess(e) {
+            e.preventDefault();
+            hideLoginError();
+            const messId = document.getElementById('joinMessId').value.trim().toLowerCase();
+            const viewPwd = document.getElementById('joinPassword').value;
+            if (!messId || !viewPwd) { showLoginError('❌ Mess ID এবং পাসওয়ার্ড দিন'); return; }
+            if (!firebaseReady || !db) { showLoginError('❌ Firebase সংযোগ নেই'); return; }
+            attemptJoinMess(messId, viewPwd, null, false, false);
+        }
+
+        function attemptJoinMess(messId, viewPwd, adminPwd, wasAdmin, silent) {
+            db.ref(`messes/${messId}/meta`).once('value').then(snapshot => {
+                const meta = snapshot.val();
+                if (!meta) { if (!silent) showLoginError('❌ Mess ID খুঁজে পাওয়া যায়নি!'); else showLoginScreen(); return; }
+                if (meta.viewPassword !== viewPwd) { if (!silent) showLoginError('❌ পাসওয়ার্ড ভুল!'); else showLoginScreen(); return; }
+                currentMessId = messId;
+                currentMessMeta = meta;
+                isAdmin = wasAdmin && adminPwd === meta.adminPassword;
+                localStorage.setItem('current_mess_id', messId);
+                localStorage.setItem('current_mess_viewpwd', viewPwd);
+                localStorage.setItem('current_mess_adminpwd', isAdmin ? adminPwd : '');
+                localStorage.setItem('current_mess_isadmin', isAdmin ? 'true' : 'false');
+                enterMess(messId, meta);
+            }).catch(err => {
+                if (!silent) showLoginError('❌ সংযোগে সমস্যা: ' + err.message);
+                else showLoginScreen();
+            });
+        }
+
+        function handleCreateMess(e) {
+            e.preventDefault();
+            hideLoginError();
+            const messId = document.getElementById('createMessId').value.trim().toLowerCase();
+            const messName = document.getElementById('createMessName').value.trim();
+            const viewPwd = document.getElementById('createViewPassword').value;
+            const adminPwd = document.getElementById('createAdminPassword').value;
+            if (!/^[a-z0-9\-]{3,30}$/.test(messId)) { showLoginError('❌ Mess ID: ৩-৩০ অক্ষর (a-z, 0-9, -)'); return; }
+            if (!messName) { showLoginError('❌ মেসের নাম দিন'); return; }
+            if (!viewPwd || viewPwd.length < 3) { showLoginError('❌ View Password কমপক্ষে ৩ অক্ষর'); return; }
+            if (!adminPwd || adminPwd.length < 4) { showLoginError('❌ Admin Password কমপক্ষে ৪ অক্ষর'); return; }
+            if (!firebaseReady || !db) { showLoginError('❌ Firebase সংযোগ নেই'); return; }
+
+            db.ref(`messes/${messId}/meta`).once('value').then(snapshot => {
+                if (snapshot.exists()) { showLoginError('❌ এই Mess ID আগেই ব্যবহৃত!'); throw new Error('MESS_EXISTS'); }
+                const newMeta = { name: messName, viewPassword: viewPwd, adminPassword: adminPwd, createdAt: Date.now() };
+                const initialData = {
+                    meta: newMeta,
+                    data: {
+                        messDetails: { name: messName },
+                        members: [
+                            { id: 'm1', name: 'সদস্য ১', phone: '', color: 'bg-indigo-600', offSchedule: { m: false, l: false, d: false } },
+                            { id: 'm2', name: 'সদস্য ২', phone: '', color: 'bg-emerald-600', offSchedule: { m: false, l: false, d: false } }
+                        ],
+                        mealsData: {},
+                        depositData: [],
+                        bazarData: [],
+                        polls: {}
+                    }
+                };
+                return db.ref(`messes/${messId}`).set(initialData).then(() => newMeta);
+            }).then((newMeta) => {
+                currentMessId = messId;
+                currentMessMeta = newMeta;
+                isAdmin = true;
+                localStorage.setItem('current_mess_id', messId);
+                localStorage.setItem('current_mess_viewpwd', newMeta.viewPassword);
+                localStorage.setItem('current_mess_adminpwd', newMeta.adminPassword);
+                localStorage.setItem('current_mess_isadmin', 'true');
+                showToast('✅ নতুন মেস তৈরি হয়েছে!');
+                enterMess(messId, newMeta);
+            }).catch(err => {
+                if (err.message === 'MESS_EXISTS') return;
+                showLoginError('❌ মেস তৈরি ব্যর্থ: ' + err.message);
+            });
+        }
+
+        function enterMess(messId, meta) {
+            messDetails = { name: meta.name };
+            document.getElementById('headerMessId').textContent = messId;
+            document.getElementById('headerMonthText').textContent = getBengaliMonthYear(selectedMonth);
+            const mp = document.getElementById('monthPicker');
+            if (mp) mp.value = selectedMonth;
+            updateAdminUI();
+            showMainApp();
+            startMessSync(messId);
+            setTimeout(() => showJusticeModal(), 1000);
+        }
+
+        function startMessSync(messId) {
+            if (currentListenerRef) currentListenerRef.off();
+            updateSyncBadge('connecting');
+            currentListenerRef = db.ref(`messes/${messId}/data`);
+            currentListenerRef.on('value', (snapshot) => {
+                const data = snapshot.val();
+                isRemoteUpdate = true;
+                if (!data) { isRemoteUpdate = false; updateSyncBadge('live'); return; }
+
+                if (data.messDetails) messDetails = data.messDetails;
+                if (Array.isArray(data.members)) members = data.members;
+                if (data.mealsData) mealsData = data.mealsData;
+                if (Array.isArray(data.depositData)) depositData = data.depositData;
+                if (Array.isArray(data.bazarData)) bazarData = data.bazarData;
+                if (data.polls && typeof data.polls === 'object') polls = data.polls;
+                else polls = {};
+
+                members.forEach(m => {
+                    if (!m.offSchedule) m.offSchedule = { m: false, l: false, d: false };
+                });
+
+                document.getElementById('headerMessName').textContent = messDetails.name || currentMessMeta.name;
+                document.getElementById('headerMonthText').textContent = getBengaliMonthYear(selectedMonth);
+
+                renderAll();
+                updateSyncBadge('live');
+                isRemoteUpdate = false;
+            }, (error) => {
+                updateSyncBadge('offline');
+                isRemoteUpdate = false;
+            });
+        }
+
+        function pushDataToFirebase() {
+            if (!firebaseReady || !currentMessId || isRemoteUpdate) return;
+            db.ref(`messes/${currentMessId}/data`).set({
+                messDetails, members, mealsData, depositData, bazarData,
+                polls, lastUpdated: Date.now()
+            }).catch(err => console.error('Push error:', err));
+        }
+
+        function logoutFromMess() {
+            if (!confirm('মেস থেকে বের হতে চান?')) return;
+            if (currentListenerRef) currentListenerRef.off();
+            localStorage.removeItem('current_mess_id');
+            localStorage.removeItem('current_mess_viewpwd');
+            localStorage.removeItem('current_mess_adminpwd');
+            localStorage.removeItem('current_mess_isadmin');
+            currentMessId = null; currentMessMeta = null; isAdmin = false;
+            members = []; mealsData = {}; depositData = []; bazarData = []; polls = {};
+            document.getElementById('joinForm').reset();
+            document.getElementById('createForm').reset();
+            showLoginTab('join');
+            showLoginScreen();
+            showToast('লগআউট সম্পন্ন', 'info');
+        }
+
+        function updateSyncBadge(status) {
+            const icon = document.getElementById('syncIcon');
+            const text = document.getElementById('syncText');
+            if (!icon || !text) return;
+            if (status === 'live') { icon.className = "fa-solid fa-cloud text-emerald-400 pulse-live"; text.textContent = "লাইভ"; }
+            else if (status === 'offline') { icon.className = "fa-solid fa-cloud-slash text-rose-400"; text.textContent = "অফলাইন"; }
+            else { icon.className = "fa-solid fa-cloud text-amber-400"; text.textContent = "সংযোগ..."; }
+        }
+
+        function toggleAdminAuth() {
+            if (isAdmin) {
+                isAdmin = false;
+                localStorage.setItem('current_mess_isadmin', 'false');
+                updateAdminUI();
+                renderPollsTab();
+                showToast('ভিউয়ার মোড', 'info');
+            } else {
+                document.getElementById('adminPinInput').value = '';
+                document.getElementById('adminModal').classList.remove('hidden');
+            }
+        }
+        function closeAdminModal() { document.getElementById('adminModal').classList.add('hidden'); pendingAdminCallback = null; }
+        function verifyAdminPin() {
+            const inputPin = document.getElementById('adminPinInput').value;
+            if (!currentMessMeta) return;
+            if (inputPin === currentMessMeta.adminPassword) {
+                isAdmin = true;
+                localStorage.setItem('current_mess_isadmin', 'true');
+                localStorage.setItem('current_mess_adminpwd', inputPin);
+                updateAdminUI();
+                renderPollsTab();
+                closeAdminModal();
+                showToast('এডমিন লগইন সফল!');
+                if (pendingAdminCallback) { const cb = pendingAdminCallback; pendingAdminCallback = null; cb(); }
+            } else showToast('ভুল পাসওয়ার্ড!', 'error');
+        }
+        function requireAdmin(callback) {
+            if (isAdmin) callback();
+            else {
+                pendingAdminCallback = callback;
+                document.getElementById('adminPinInput').value = '';
+                document.getElementById('adminModal').classList.remove('hidden');
+            }
+        }
+        function updateAdminUI() {
+            const statusText = document.getElementById('adminStatusText');
+            const icon = document.getElementById('adminIcon');
+            const authBtnText = document.getElementById('authBtnText');
+            const badge = document.getElementById('adminBadge');
+            if (isAdmin) {
+                statusText.textContent = "এডমিন মোড";
+                icon.className = "fa-solid fa-lock-open text-emerald-400";
+                authBtnText.textContent = "লগআউট এডমিন";
+                badge.className = "flex items-center gap-1.5 bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 text-xs px-3 py-1.5 rounded-full font-semibold";
+            } else {
+                statusText.textContent = "ভিউয়ার মোড";
+                icon.className = "fa-solid fa-lock text-amber-400";
+                authBtnText.textContent = "এডমিন লগইন";
+                badge.className = "flex items-center gap-1.5 bg-slate-800 text-amber-300 border border-amber-400/30 text-xs px-3 py-1.5 rounded-full font-semibold";
+            }
+        }
+
+        function toggleDarkMode() {
+            const html = document.documentElement;
+            const icon = document.getElementById('themeIcon');
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark'); html.classList.add('light');
+                icon.className = "fa-solid fa-moon text-base";
+                localStorage.setItem('mess_theme', 'light');
+            } else {
+                html.classList.remove('light'); html.classList.add('dark');
+                icon.className = "fa-solid fa-sun text-base text-amber-400";
+                localStorage.setItem('mess_theme', 'dark');
+            }
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('text-indigo-600', 'dark:text-indigo-400', 'bg-indigo-50', 'dark:bg-indigo-950/60', 'border', 'border-indigo-200', 'dark:border-indigo-800');
+                btn.classList.add('text-slate-600', 'dark:text-slate-400');
+            });
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            activeBtn.classList.add('text-indigo-600', 'dark:text-indigo-400', 'bg-indigo-50', 'dark:bg-indigo-950/60', 'border', 'border-indigo-200', 'dark:border-indigo-800');
+            activeBtn.classList.remove('text-slate-600', 'dark:text-slate-400');
+
+            if (tabName === 'polls') renderPollsTab();
+        }
+
+        function getDaysInMonth(yearMonthStr) {
+            const [year, month] = yearMonthStr.split('-').map(Number);
+            return new Date(year, month, 0).getDate();
+        }
+        function getBengaliMonthYear(yearMonthStr) {
+            if (!yearMonthStr) return '-';
+            const [y, m] = yearMonthStr.split('-');
+            return `${bnMonths[m] || m} ${y}`;
+        }
+        function formatBengaliDate(dateStr) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const dateObj = new Date(y, m - 1, d);
+            return `${d} ${bnMonths[String(m).padStart(2,'0')]} ${y}, ${bnDays[dateObj.getDay()]}`;
+        }
+        function changeActiveMonth(monthVal) {
+            if (!monthVal) return;
+            selectedMonth = monthVal;
+            document.getElementById('headerMonthText').textContent = getBengaliMonthYear(selectedMonth);
+            renderAll();
+            showToast(`মাস: ${getBengaliMonthYear(selectedMonth)}`);
+        }
+        function goToToday() {
+            const today = new Date().toISOString().slice(0, 10);
+            document.getElementById('pollDatePicker').value = today;
+            renderPollsTab();
+        }
+
+        function calculateStats() {
+            const daysInMonth = getDaysInMonth(selectedMonth);
+            let memberMealTotals = {};
+            let grandTotalMeals = 0;
+            members.forEach(m => memberMealTotals[m.id] = 0);
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+                if (mealsData[dateStr]) {
+                    members.forEach(m => {
+                        if (mealsData[dateStr][m.id]) {
+                            const { m: morning = 0, l: noon = 0, d: night = 0 } = mealsData[dateStr][m.id];
+                            const sum = (Number(morning) || 0) + (Number(noon) || 0) + (Number(night) || 0);
+                            memberMealTotals[m.id] += sum;
+                            grandTotalMeals += sum;
+                        }
+                    });
+                }
+            }
+
+            let memberDepositTotals = {};
+            let grandTotalDeposit = 0;
+            members.forEach(m => memberDepositTotals[m.id] = 0);
+            depositData.filter(item => item.date && item.date.startsWith(selectedMonth)).forEach(item => {
+                const amt = Number(item.amount) || 0;
+                if (memberDepositTotals[item.memberId] !== undefined) memberDepositTotals[item.memberId] += amt;
+                grandTotalDeposit += amt;
+            });
+
+            let grandTotalBazar = 0;
+            bazarData.filter(item => item.date && item.date.startsWith(selectedMonth)).forEach(item => {
+                grandTotalBazar += (Number(item.amount) || 0);
+            });
+
+            const mealRate = grandTotalMeals > 0 ? (grandTotalBazar / grandTotalMeals) : 0;
+            return { daysInMonth, memberMealTotals, grandTotalMeals, memberDepositTotals, grandTotalDeposit, grandTotalBazar, mealRate };
+        }
+
+        function renderAll() {
+            renderMealSheet();
+            renderMembersDirectory();
+            renderScheduleTab();
+            renderPollsTab();
+            renderDepositTab();
+            renderBazarTab();
+            renderSummaryTab();
+            updateTopMetrics();
+        }
+
+        function updateTopMetrics() {
+            const stats = calculateStats();
+            document.getElementById('totalMessMeals').textContent = stats.grandTotalMeals.toFixed(2);
+            document.getElementById('totalMessDeposit').textContent = stats.grandTotalDeposit.toLocaleString('bn-BD');
+            document.getElementById('totalMessBazar').textContent = stats.grandTotalBazar.toLocaleString('bn-BD');
+            document.getElementById('currentMealRate').textContent = stats.mealRate.toFixed(2);
+        }
+
+        function setCategorySuggestion(name) { document.getElementById('bazarCategory').value = name; }
+
+        // MEAL SHEET
+        function renderMealSheet() {
+            const stats = calculateStats();
+            const daysCount = stats.daysInMonth;
+            const headerRow = document.getElementById('tableHeader');
+            let headerHTML = `<th class="p-3 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-100 dark:bg-slate-800 z-30 min-w-[120px]">তারিখ</th>`;
 
             members.forEach(member => {
-                const dayData = (mealsData[dateStr] && mealsData[dateStr][member.id]) || { m: 0, l: 0, d: 0 };
-                const cellSum = (Number(dayData.m) || 0) + (Number(dayData.l) || 0) + (Number(dayData.d) || 0);
-                dailyTotalMealSum += cellSum;
-
-                bodyHTML += `
-                    <td class="p-1 border border-slate-200 dark:border-slate-800 text-center hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
-                        <div class="flex items-center justify-center gap-1 text-[10px]">
-                            <div class="flex-1 bg-yellow-50 dark:bg-yellow-950/40 p-0.5 rounded border border-yellow-200 dark:border-yellow-800/50">
-                                <span class="text-yellow-700 dark:text-yellow-400 font-bold block text-[9px]">স</span>
-                                <input type="number" step="0.25" min="0" value="${dayData.m !== undefined ? dayData.m : 0}" onchange="updateMealCell('${dateStr}', '${member.id}', 'm', this.value)" class="w-full text-center bg-transparent border-0 p-0 font-bold text-slate-800 dark:text-slate-100 input-cell">
-                            </div>
-                            <div class="flex-1 bg-orange-50 dark:bg-orange-950/40 p-0.5 rounded border border-orange-200 dark:border-orange-800/50">
-                                <span class="text-orange-700 dark:text-orange-400 font-bold block text-[9px]">দু</span>
-                                <input type="number" step="0.25" min="0" value="${dayData.l !== undefined ? dayData.l : 0}" onchange="updateMealCell('${dateStr}', '${member.id}', 'l', this.value)" class="w-full text-center bg-transparent border-0 p-0 font-bold text-slate-800 dark:text-slate-100 input-cell">
-                            </div>
-                            <div class="flex-1 bg-indigo-50 dark:bg-indigo-950/40 p-0.5 rounded border border-indigo-200 dark:border-indigo-800/50">
-                                <span class="text-indigo-700 dark:text-indigo-400 font-bold block text-[9px]">রা</span>
-                                <input type="number" step="0.25" min="0" value="${dayData.d !== undefined ? dayData.d : 0}" onchange="updateMealCell('${dateStr}', '${member.id}', 'd', this.value)" class="w-full text-center bg-transparent border-0 p-0 font-bold text-slate-800 dark:text-slate-100 input-cell">
-                            </div>
-                        </div>
-                    </td>`;
-            });
-
-            bodyHTML += `<td class="p-2 border border-slate-200 dark:border-slate-800 text-center font-extrabold text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/30 text-xs">${dailyTotalMealSum > 0 ? dailyTotalMealSum.toFixed(2) : '-'}</td></tr>`;
-        }
-        tbody.innerHTML = bodyHTML;
-
-        const tfoot = document.getElementById('mealTableFoot');
-        let footHTML = `<tr><td class="p-3 border border-slate-200 dark:border-slate-800 sticky left-0 bg-indigo-100 dark:bg-slate-800 z-10 font-bold text-slate-800 dark:text-slate-100">মোট মিল</td>`;
-        members.forEach(member => {
-            const totalM = stats.memberMealTotals[member.id] || 0;
-            footHTML += `<td class="p-2 border border-slate-200 dark:border-slate-800 text-center font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-slate-800 text-sm">${totalM.toFixed(2)}</td>`;
-        });
-        footHTML += `<td class="p-3 border border-slate-200 dark:border-slate-800 text-center text-sm font-extrabold text-indigo-950 dark:text-indigo-200 bg-indigo-200 dark:bg-indigo-900">${stats.grandTotalMeals.toFixed(2)}</td></tr>`;
-        tfoot.innerHTML = footHTML;
-    }
-
-    function updateMealCell(dateStr, memberId, type, val) {
-        requireAdmin(() => {
-            const numVal = parseFloat(val) || 0;
-            if (!mealsData[dateStr]) mealsData[dateStr] = {};
-            if (!mealsData[dateStr][memberId]) mealsData[dateStr][memberId] = { m: 0, l: 0, d: 0 };
-            mealsData[dateStr][memberId][type] = numVal;
-            pushDataToFirebase();
-            renderAll();
-            showToast('মিল আপডেট');
-        });
-    }
-
-    // MEMBERS
-    function renderMembersDirectory() {
-        const grid = document.getElementById('membersGrid');
-        const stats = calculateStats();
-        if (members.length === 0) { grid.innerHTML = `<div class="col-span-full p-8 text-center text-slate-400">কোনো মেম্বার নেই</div>`; return; }
-        grid.innerHTML = members.map(m => {
-            const totalMeals = stats.memberMealTotals[m.id] || 0;
-            const totalDeposit = stats.memberDepositTotals[m.id] || 0;
-            const initials = (m.name || '?').trim().charAt(0);
-            return `
-                <div class="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition">
-                    <div class="flex items-center justify-between gap-3 mb-3">
-                        <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full ${m.color || 'bg-indigo-600'} text-white font-bold flex items-center justify-center text-sm shadow">${initials}</div>
-                            <div>
-                                <h3 class="font-bold text-slate-800 dark:text-slate-100 text-sm">${m.name}</h3>
-                                <p class="text-xs text-slate-500 dark:text-slate-400">${m.phone || 'ফোন নেই'}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-1">
-                            <button onclick="requireAdmin(() => openEditMemberModal('${m.id}'))" class="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition"><i class="fa-solid fa-pen-to-square"></i></button>
-                            <button onclick="requireAdmin(() => deleteMember('${m.id}'))" class="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition"><i class="fa-solid fa-trash-can"></i></button>
-                        </div>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2 text-center pt-3 border-t border-slate-200 dark:border-slate-700/60">
-                        <div class="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                            <span class="text-[10px] text-slate-400 font-semibold uppercase block">মোট মিল</span>
-                            <span class="text-sm font-bold text-indigo-600 dark:text-indigo-400">${totalMeals.toFixed(2)}</span>
-                        </div>
-                        <div class="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
-                            <span class="text-[10px] text-slate-400 font-semibold uppercase block">মোট জমা</span>
-                            <span class="text-sm font-bold text-emerald-600 dark:text-emerald-400">৳${totalDeposit}</span>
-                        </div>
-                    </div>
-                </div>`;
-        }).join('');
-    }
-
-    function openAddMemberModal() {
-        document.getElementById('editMemberId').value = '';
-        document.getElementById('newMemberName').value = '';
-        document.getElementById('newMemberPhone').value = '';
-        document.getElementById('memberModalTitle').textContent = 'নতুন মেম্বার';
-        document.getElementById('memberModal').classList.remove('hidden');
-    }
-    function openEditMemberModal(id) {
-        const member = members.find(m => m.id === id);
-        if (!member) return;
-        document.getElementById('editMemberId').value = member.id;
-        document.getElementById('newMemberName').value = member.name;
-        document.getElementById('newMemberPhone').value = member.phone || '';
-        document.getElementById('newMemberColor').value = member.color || 'bg-indigo-600';
-        document.getElementById('memberModalTitle').textContent = 'মেম্বার আপডেট';
-        document.getElementById('memberModal').classList.remove('hidden');
-    }
-    function closeMemberModal() { document.getElementById('memberModal').classList.add('hidden'); }
-
-    function saveMember() {
-        const id = document.getElementById('editMemberId').value;
-        const name = document.getElementById('newMemberName').value.trim();
-        const phone = document.getElementById('newMemberPhone').value.trim();
-        const color = document.getElementById('newMemberColor').value;
-        if (!name) { showToast('নাম লিখুন!', 'error'); return; }
-
-        if (id) {
-            const member = members.find(m => m.id === id);
-            if (member) { member.name = name; member.phone = phone; member.color = color; }
-            showToast('মেম্বার আপডেট');
-        } else {
-            const newId = 'm_' + Date.now();
-            members.push({ id: newId, name, phone, color, offSchedule: { m: false, l: false, d: false } });
-            showToast('✅ নতুন মেম্বার যোগ হয়েছে!');
-        }
-        pushDataToFirebase();
-        closeMemberModal();
-        renderAll();
-    }
-    function deleteMember(id) {
-        if (confirm('ডিলিট করবেন?')) {
-            members = members.filter(m => m.id !== id);
-            pushDataToFirebase();
-            renderAll();
-            showToast('ডিলিট হয়েছে');
-        }
-    }
-
-    // SCHEDULE
-    function renderScheduleTab() {
-        const tbody = document.getElementById('scheduleTableBody');
-        if (members.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">কোনো মেম্বার নেই</td></tr>`; return; }
-        tbody.innerHTML = members.map(m => {
-            const sched = m.offSchedule || { m: false, l: false, d: false };
-            return `
-                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
-                    <td class="p-3.5 border border-slate-200 dark:border-slate-800 font-semibold text-slate-800 dark:text-slate-100">${m.name}</td>
-                    <td class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">
-                        <button onclick="requireAdmin(() => toggleOffSchedule('${m.id}', 'm'))" class="px-3 py-1.5 rounded-xl text-xs font-bold transition ${sched.m ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800'}">${sched.m ? 'Off' : 'On'}</button>
-                    </td>
-                    <td class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">
-                        <button onclick="requireAdmin(() => toggleOffSchedule('${m.id}', 'l'))" class="px-3 py-1.5 rounded-xl text-xs font-bold transition ${sched.l ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800'}">${sched.l ? 'Off' : 'On'}</button>
-                    </td>
-                    <td class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">
-                        <button onclick="requireAdmin(() => toggleOffSchedule('${m.id}', 'd'))" class="px-3 py-1.5 rounded-xl text-xs font-bold transition ${sched.d ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800'}">${sched.d ? 'Off' : 'On'}</button>
-                    </td>
-                    <td class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">
-                        <button onclick="requireAdmin(() => applyBulkMealOff('${m.id}'))" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-3 py-1.5 rounded-xl shadow-sm transition flex items-center justify-center gap-1 mx-auto">
-                            <i class="fa-solid fa-check-double"></i><span>অ্যাপ্লাই</span>
-                        </button>
-                    </td>
-                </tr>`;
-        }).join('');
-    }
-    function toggleOffSchedule(memberId, mealType) {
-        const member = members.find(m => m.id === memberId);
-        if (member) {
-            if (!member.offSchedule) member.offSchedule = { m: false, l: false, d: false };
-            member.offSchedule[mealType] = !member.offSchedule[mealType];
-            pushDataToFirebase();
-            renderScheduleTab();
-            showToast('আপডেট');
-        }
-    }
-    function applyBulkMealOff(memberId) {
-        const member = members.find(m => m.id === memberId);
-        if (!member) return;
-        const daysCount = getDaysInMonth(selectedMonth);
-        const { m: offM, l: offL, d: offD } = member.offSchedule || { m: false, l: false, d: false };
-        for (let day = 1; day <= daysCount; day++) {
-            const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
-            if (!mealsData[dateStr]) mealsData[dateStr] = {};
-            if (!mealsData[dateStr][memberId]) mealsData[dateStr][memberId] = { m: 1, l: 1, d: 1 };
-            if (offM) mealsData[dateStr][memberId].m = 0;
-            if (offL) mealsData[dateStr][memberId].l = 0;
-            if (offD) mealsData[dateStr][memberId].d = 0;
-        }
-        pushDataToFirebase();
-        renderAll();
-        showToast(`${member.name}-এর জন্য অ্যাপ্লাই!`);
-    }
-
-    // 🗳️ DAILY POLLS
-    function getPollForDate(dateStr) {
-        if (!polls[dateStr]) {
-            polls[dateStr] = { m: { votes: {} }, l: { votes: {} }, d: { votes: {} } };
-        }
-        if (!polls[dateStr].m) polls[dateStr].m = { votes: {} };
-        if (!polls[dateStr].l) polls[dateStr].l = { votes: {} };
-        if (!polls[dateStr].d) polls[dateStr].d = { votes: {} };
-        if (!polls[dateStr].m.votes) polls[dateStr].m.votes = {};
-        if (!polls[dateStr].l.votes) polls[dateStr].l.votes = {};
-        if (!polls[dateStr].d.votes) polls[dateStr].d.votes = {};
-        return polls[dateStr];
-    }
-
-    function renderPollsTab() {
-        const container = document.getElementById('pollsContainer');
-        const datePicker = document.getElementById('pollDatePicker');
-        if (!container || !datePicker) return;
-
-        const dateStr = datePicker.value || new Date().toISOString().slice(0, 10);
-        const poll = getPollForDate(dateStr);
-
-        const mealsConfig = [
-            { key: 'm', label: 'সকালের মিল', time: 'সকাল ৭টা - ৯টা', color: 'yellow', icon: 'fa-sun' },
-            { key: 'l', label: 'দুপুরের মিল', time: 'দুপুর ১টা - ২টা', color: 'orange', icon: 'fa-cloud-sun' },
-            { key: 'd', label: 'রাতের মিল', time: 'রাত ৮টা - ১০টা', color: 'indigo', icon: 'fa-moon' }
-        ];
-
-        // Admin permission banner
-        let adminBannerHTML = '';
-        if (!isAdmin) {
-            adminBannerHTML = `
-                <div class="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700 rounded-2xl p-4 mb-4 flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-2xl bg-amber-400 text-amber-900 flex items-center justify-center text-xl shadow flex-shrink-0">
-                        <i class="fa-solid fa-lock"></i>
-                    </div>
-                    <div class="flex-1">
-                        <p class="font-bold text-amber-900 dark:text-amber-200 text-sm">🔒 ভোট দিতে এডমিন লগইন লাগবে</p>
-                        <p class="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">আপনি এখন ভিউয়ার মোডে আছেন। ভোট দিতে উপরে "এডমিন লগইন" বাটনে ক্লিক করুন।</p>
-                    </div>
-                    <button onclick="toggleAdminAuth()" class="bg-amber-500 hover:bg-amber-400 text-white font-bold px-4 py-2 rounded-xl text-xs shadow transition flex items-center gap-1.5 flex-shrink-0">
-                        <i class="fa-solid fa-key"></i>
-                        <span>লগইন</span>
-                    </button>
-                </div>
-            `;
-        } else {
-            adminBannerHTML = `
-                <div class="bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700 rounded-2xl p-3 mb-4 flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center text-lg shadow flex-shrink-0">
-                        <i class="fa-solid fa-lock-open"></i>
-                    </div>
-                    <div class="flex-1">
-                        <p class="font-bold text-emerald-900 dark:text-emerald-200 text-sm">✅ এডমিন মোড — আপনি ভোট দিতে পারবেন</p>
-                        <p class="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">প্রতিটি মেম্বারের হয়ে হ্যাঁ/না বাটনে ক্লিক করে ভোট দিন</p>
-                    </div>
-                </div>
-            `;
-        }
-
-        let html = `
-            ${adminBannerHTML}
-            <div class="flex items-center gap-3 mb-4">
-                <div class="date-badge text-white px-4 py-2 rounded-2xl shadow-lg flex items-center gap-2">
-                    <i class="fa-solid fa-calendar-check"></i>
-                    <span class="font-bold text-sm">${formatBengaliDate(dateStr)}</span>
-                </div>
-            </div>
-        `;
-
-        mealsConfig.forEach(meal => {
-            const voteData = poll[meal.key].votes || {};
-            const entries = Object.entries(voteData);
-            const yesCount = entries.filter(([_, qty]) => Number(qty) > 0).length;
-            const noCount = entries.filter(([_, qty]) => Number(qty) === 0).length;
-            const totalVoted = yesCount + noCount;
-
-            const memberRows = members.map(member => {
-                const memberVote = voteData[member.id];
-                const hasVoted = memberVote !== undefined;
-                const qty = Number(memberVote) || 0;
-                const isYes = hasVoted && qty > 0;
-                const isNo = hasVoted && qty === 0;
+                const totalM = stats.memberMealTotals[member.id] || 0;
                 const initials = (member.name || '?').trim().charAt(0);
-
-                return `
-                    <div class="member-row flex items-center justify-between p-2.5 gap-2">
-                        <div class="flex items-center gap-2.5 flex-1 min-w-0">
-                            <div class="w-10 h-10 rounded-full ${member.color || 'bg-indigo-600'} text-white font-bold flex items-center justify-center text-sm shadow flex-shrink-0">
-                                ${initials}
-                            </div>
-                            <div class="min-w-0 flex-1">
-                                <p class="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">${member.name}</p>
-                                ${hasVoted ? `<p class="text-[10px] ${isYes ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} font-semibold">
-                                    ${isYes ? `✅ হ্যাঁ — ${qty} মিল` : '❌ না — 0 মিল'}
-                                </p>` : `<p class="text-[10px] text-slate-400">ভোট দেয়নি</p>`}
-                            </div>
+                headerHTML += `
+                    <th class="p-2 border border-slate-200 dark:border-slate-800 text-center min-w-[135px] bg-slate-100 dark:bg-slate-800/80">
+                        <div class="flex flex-col items-center justify-center gap-1 py-1">
+                            <div class="w-7 h-7 rounded-full ${member.color || 'bg-indigo-600'} text-white font-bold flex items-center justify-center text-xs shadow-sm">${initials}</div>
+                            <span class="font-bold text-slate-800 dark:text-slate-100 text-xs truncate max-w-[120px]">${member.name}</span>
+                            <span class="text-[10px] bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 font-extrabold px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800">মোট: ${totalM.toFixed(2)}</span>
                         </div>
-                        <div class="flex items-center gap-1.5 flex-shrink-0">
-                            <button onclick="openVoteQtyModal('${dateStr}', '${meal.key}', '${member.id}', true)"
-                                class="vote-btn-yes ${isYes ? 'selected' : ''} text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1 shadow-md min-w-[60px] justify-center">
-                                <i class="fa-solid fa-check"></i>
-                                <span>হ্যাঁ</span>
-                            </button>
-                            <button onclick="openVoteQtyModal('${dateStr}', '${meal.key}', '${member.id}', false)"
-                                class="vote-btn-no ${isNo ? 'selected' : ''} text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1 shadow-md min-w-[60px] justify-center">
-                                <i class="fa-solid fa-xmark"></i>
-                                <span>না</span>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            const colorMap = {
-                yellow: { bg: 'bg-yellow-50 dark:bg-yellow-950/40', border: 'border-yellow-200 dark:border-yellow-800', iconBg: 'bg-yellow-400 text-yellow-900' },
-                orange: { bg: 'bg-orange-50 dark:bg-orange-950/40', border: 'border-orange-200 dark:border-orange-800', iconBg: 'bg-orange-400 text-orange-900' },
-                indigo: { bg: 'bg-indigo-50 dark:bg-indigo-950/40', border: 'border-indigo-200 dark:border-indigo-800', iconBg: 'bg-indigo-500 text-white' }
-            };
-            const c = colorMap[meal.color];
-
-            html += `
-                <div class="poll-card overflow-hidden">
-                    <div class="${c.bg} border-b ${c.border} p-4 flex items-center justify-between gap-3 flex-wrap">
-                        <div class="flex items-center gap-3">
-                            <div class="w-12 h-12 rounded-2xl ${c.iconBg} flex items-center justify-center text-xl shadow">
-                                <i class="fa-solid ${meal.icon}"></i>
-                            </div>
-                            <div>
-                                <h3 class="font-bold text-slate-800 dark:text-slate-100 text-base">${meal.label}</h3>
-                                <p class="text-[11px] text-slate-500 dark:text-slate-400">${meal.time}</p>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2 text-xs font-bold">
-                            <span class="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                                ✅ ${yesCount}
-                            </span>
-                            <span class="bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 rounded-full border border-rose-200 dark:border-rose-800">
-                                ❌ ${noCount}
-                            </span>
-                            <span class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
-                                ${totalVoted}/${members.length}
-                            </span>
-                        </div>
-                    </div>
-                    <div class="p-2">
-                        ${members.length === 0 ? '<p class="text-center text-slate-400 py-6 text-sm">কোনো মেম্বার নেই</p>' : memberRows}
-                    </div>
-                </div>
-            `;
-        });
-
-        container.innerHTML = html;
-    }
-
-    // 🍽️ Vote + Quantity Modal — ONLY ADMIN
-    function openVoteQtyModal(dateStr, mealType, memberId, voteValue) {
-        // 🔒 Check admin permission
-        if (!isAdmin) {
-            showToast('🔒 ভোট দিতে এডমিন লগইন করুন', 'error');
-            // Show admin login modal
-            pendingAdminCallback = () => {
-                // After admin login, reopen the vote modal
-                setTimeout(() => openVoteQtyModal(dateStr, mealType, memberId, voteValue), 300);
-            };
-            document.getElementById('adminPinInput').value = '';
-            document.getElementById('adminModal').classList.remove('hidden');
-            return;
-        }
-
-        const member = members.find(m => m.id === memberId);
-        if (!member) return;
-
-        pendingVote = { dateStr, mealType, memberId, voteValue };
-
-        const mealNames = { m: 'সকালের মিল', l: 'দুপুরের মিল', d: 'রাতের মিল' };
-        const mealName = mealNames[mealType];
-        const modal = document.getElementById('voteQtyModal');
-        const iconWrap = document.getElementById('voteQtyIconWrap');
-        const icon = document.getElementById('voteQtyIcon');
-
-        if (voteValue) {
-            iconWrap.className = "w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2 text-2xl shadow-inner bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400";
-            icon.className = "fa-solid fa-check";
-            document.getElementById('voteQtyTitle').textContent = `${member.name} — হ্যাঁ`;
-            document.getElementById('voteQtySubtitle').textContent = `${mealName} · কত মিল খাবেন?`;
-            document.getElementById('voteQtyInput').value = 1;
-            document.getElementById('voteQtyInput').parentElement.style.display = 'block';
-            document.querySelectorAll('#voteQtyModal .meal-qty-btn').forEach(b => b.classList.remove('selected'));
-            const btns = document.querySelectorAll('#voteQtyModal .meal-qty-btn');
-            btns.forEach(b => {
-                if (b.textContent.trim() === '1') b.classList.add('selected');
+                    </th>`;
             });
-        } else {
-            iconWrap.className = "w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2 text-2xl shadow-inner bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400";
-            icon.className = "fa-solid fa-xmark";
-            document.getElementById('voteQtyTitle').textContent = `${member.name} — না`;
-            document.getElementById('voteQtySubtitle').textContent = `${mealName} · খাবেন না (0 মিল)`;
-            document.getElementById('voteQtyInput').value = 0;
-            document.getElementById('voteQtyInput').parentElement.style.display = 'none';
-            document.querySelectorAll('#voteQtyModal .meal-qty-btn').forEach(b => b.classList.remove('selected'));
+
+            headerHTML += `<th class="p-3 border border-slate-200 dark:border-slate-800 text-center min-w-[110px] bg-indigo-100/70 dark:bg-indigo-950/80 font-bold text-indigo-900 dark:text-indigo-200">দৈনিক মোট</th>`;
+            headerRow.innerHTML = headerHTML;
+
+            const tbody = document.getElementById('mealTableBody');
+            let bodyHTML = '';
+            for (let day = 1; day <= daysCount; day++) {
+                const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+                let dailyTotalMealSum = 0;
+                bodyHTML += `<tr>`;
+                bodyHTML += `<td class="p-2 font-semibold text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-800 sticky left-0 bg-slate-50 dark:bg-slate-900 z-10 shadow-sm text-center"><span class="text-xs font-bold">${day}</span></td>`;
+
+                members.forEach(member => {
+                    const dayData = (mealsData[dateStr] && mealsData[dateStr][member.id]) || { m: 0, l: 0, d: 0 };
+                    const cellSum = (Number(dayData.m) || 0) + (Number(dayData.l) || 0) + (Number(dayData.d) || 0);
+                    dailyTotalMealSum += cellSum;
+
+                    bodyHTML += `
+                        <td class="p-1 border border-slate-200 dark:border-slate-800 text-center hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
+                            <div class="flex items-center justify-center gap-1 text-[10px]">
+                                <div class="flex-1 bg-yellow-50 dark:bg-yellow-950/40 p-0.5 rounded border border-yellow-200 dark:border-yellow-800/50">
+                                    <span class="text-yellow-700 dark:text-yellow-400 font-bold block text-[9px]">স</span>
+                                    <input type="number" step="0.25" min="0" value="${dayData.m !== undefined ? dayData.m : 0}" onchange="updateMealCell('${dateStr}', '${member.id}', 'm', this.value)" class="w-full text-center bg-transparent border-0 p-0 font-bold text-slate-800 dark:text-slate-100 input-cell">
+                                </div>
+                                <div class="flex-1 bg-orange-50 dark:bg-orange-950/40 p-0.5 rounded border border-orange-200 dark:border-orange-800/50">
+                                    <span class="text-orange-700 dark:text-orange-400 font-bold block text-[9px]">দু</span>
+                                    <input type="number" step="0.25" min="0" value="${dayData.l !== undefined ? dayData.l : 0}" onchange="updateMealCell('${dateStr}', '${member.id}', 'l', this.value)" class="w-full text-center bg-transparent border-0 p-0 font-bold text-slate-800 dark:text-slate-100 input-cell">
+                                </div>
+                                <div class="flex-1 bg-indigo-50 dark:bg-indigo-950/40 p-0.5 rounded border border-indigo-200 dark:border-indigo-800/50">
+                                    <span class="text-indigo-700 dark:text-indigo-400 font-bold block text-[9px]">রা</span>
+                                    <input type="number" step="0.25" min="0" value="${dayData.d !== undefined ? dayData.d : 0}" onchange="updateMealCell('${dateStr}', '${member.id}', 'd', this.value)" class="w-full text-center bg-transparent border-0 p-0 font-bold text-slate-800 dark:text-slate-100 input-cell">
+                                </div>
+                            </div>
+                        </td>`;
+                });
+
+                bodyHTML += `<td class="p-2 border border-slate-200 dark:border-slate-800 text-center font-extrabold text-indigo-700 dark:text-indigo-300 bg-indigo-50/50 dark:bg-indigo-950/30 text-xs">${dailyTotalMealSum > 0 ? dailyTotalMealSum.toFixed(2) : '-'}</td></tr>`;
+            }
+            tbody.innerHTML = bodyHTML;
+
+            const tfoot = document.getElementById('mealTableFoot');
+            let footHTML = `<tr><td class="p-3 border border-slate-200 dark:border-slate-800 sticky left-0 bg-indigo-100 dark:bg-slate-800 z-10 font-bold text-slate-800 dark:text-slate-100">মোট মিল</td>`;
+            members.forEach(member => {
+                const totalM = stats.memberMealTotals[member.id] || 0;
+                footHTML += `<td class="p-2 border border-slate-200 dark:border-slate-800 text-center font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50/80 dark:bg-slate-800 text-sm">${totalM.toFixed(2)}</td>`;
+            });
+            footHTML += `<td class="p-3 border border-slate-200 dark:border-slate-800 text-center text-sm font-extrabold text-indigo-950 dark:text-indigo-200 bg-indigo-200 dark:bg-indigo-900">${stats.grandTotalMeals.toFixed(2)}</td></tr>`;
+            tfoot.innerHTML = footHTML;
         }
 
-        modal.classList.remove('hidden');
-    }
-
-    function selectQty(val) {
-        document.getElementById('voteQtyInput').value = val;
-        document.querySelectorAll('#voteQtyModal .meal-qty-btn').forEach(b => b.classList.remove('selected'));
-        event.target.classList.add('selected');
-    }
-
-    function closeVoteQtyModal() {
-        document.getElementById('voteQtyModal').classList.add('hidden');
-        pendingVote = null;
-    }
-
-    function confirmVoteWithQty() {
-        if (!pendingVote) return;
-        // Double-check admin
-        if (!isAdmin) {
-            closeVoteQtyModal();
-            showToast('🔒 ভোট দিতে এডমিন লগইন করুন', 'error');
-            return;
+        function updateMealCell(dateStr, memberId, type, val) {
+            requireAdmin(() => {
+                const numVal = parseFloat(val) || 0;
+                if (!mealsData[dateStr]) mealsData[dateStr] = {};
+                if (!mealsData[dateStr][memberId]) mealsData[dateStr][memberId] = { m: 0, l: 0, d: 0 };
+                mealsData[dateStr][memberId][type] = numVal;
+                pushDataToFirebase();
+                renderAll();
+                showToast('মিল আপডেট');
+            });
         }
 
-        const { dateStr, mealType, memberId, voteValue } = pendingVote;
-        let qty;
-        if (voteValue === false) {
-            qty = 0;
-        } else {
-            qty = parseFloat(document.getElementById('voteQtyInput').value) || 1;
-            if (qty < 0) qty = 0;
+        // MEMBERS
+        function renderMembersDirectory() {
+            const grid = document.getElementById('membersGrid');
+            const stats = calculateStats();
+            if (members.length === 0) { grid.innerHTML = `<div class="col-span-full p-8 text-center text-slate-400">কোনো মেম্বার নেই</div>`; return; }
+            grid.innerHTML = members.map(m => {
+                const totalMeals = stats.memberMealTotals[m.id] || 0;
+                const totalDeposit = stats.memberDepositTotals[m.id] || 0;
+                const initials = (m.name || '?').trim().charAt(0);
+                return `
+                    <div class="bg-slate-50 dark:bg-slate-800/60 rounded-2xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition">
+                        <div class="flex items-center justify-between gap-3 mb-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-full ${m.color || 'bg-indigo-600'} text-white font-bold flex items-center justify-center text-sm shadow">${initials}</div>
+                                <div>
+                                    <h3 class="font-bold text-slate-800 dark:text-slate-100 text-sm">${m.name}</h3>
+                                    <p class="text-xs text-slate-500 dark:text-slate-400">${m.phone || 'ফোন নেই'}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <button onclick="requireAdmin(() => openEditMemberModal('${m.id}'))" class="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition"><i class="fa-solid fa-pen-to-square"></i></button>
+                                <button onclick="requireAdmin(() => deleteMember('${m.id}'))" class="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition"><i class="fa-solid fa-trash-can"></i></button>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-center pt-3 border-t border-slate-200 dark:border-slate-700/60">
+                            <div class="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                                <span class="text-[10px] text-slate-400 font-semibold uppercase block">মোট মিল</span>
+                                <span class="text-sm font-bold text-indigo-600 dark:text-indigo-400">${totalMeals.toFixed(2)}</span>
+                            </div>
+                            <div class="bg-white dark:bg-slate-900 p-2 rounded-xl border border-slate-100 dark:border-slate-800">
+                                <span class="text-[10px] text-slate-400 font-semibold uppercase block">মোট জমা</span>
+                                <span class="text-sm font-bold text-emerald-600 dark:text-emerald-400">৳${totalDeposit}</span>
+                            </div>
+                        </div>
+                    </div>`;
+            }).join('');
         }
 
-        const poll = getPollForDate(dateStr);
-        poll[mealType].votes[memberId] = qty;
-
-        // Auto update meal sheet
-        if (!mealsData[dateStr]) mealsData[dateStr] = {};
-        if (!mealsData[dateStr][memberId]) mealsData[dateStr][memberId] = { m: 0, l: 0, d: 0 };
-        mealsData[dateStr][memberId][mealType] = qty;
-
-        pushDataToFirebase();
-        closeVoteQtyModal();
-        renderPollsTab();
-        renderMealSheet();
-        updateTopMetrics();
-
-        const member = members.find(m => m.id === memberId);
-        if (qty > 0) {
-            showToast(`✅ ${member?.name} — ${qty} মিল ভোট রেকর্ড`);
-        } else {
-            showToast(`❌ ${member?.name} — খাবেন না (0 মিল)`);
+        function openAddMemberModal() {
+            document.getElementById('editMemberId').value = '';
+            document.getElementById('newMemberName').value = '';
+            document.getElementById('newMemberPhone').value = '';
+            document.getElementById('memberModalTitle').textContent = 'নতুন মেম্বার';
+            document.getElementById('memberModal').classList.remove('hidden');
         }
-    }
+        function openEditMemberModal(id) {
+            const member = members.find(m => m.id === id);
+            if (!member) return;
+            document.getElementById('editMemberId').value = member.id;
+            document.getElementById('newMemberName').value = member.name;
+            document.getElementById('newMemberPhone').value = member.phone || '';
+            document.getElementById('newMemberColor').value = member.color || 'bg-indigo-600';
+            document.getElementById('memberModalTitle').textContent = 'মেম্বার আপডেট';
+            document.getElementById('memberModal').classList.remove('hidden');
+        }
+        function closeMemberModal() { document.getElementById('memberModal').classList.add('hidden'); }
 
-    // DEPOSIT
-    function renderDepositTab() {
-        const select = document.getElementById('depositMemberSelect');
-        if (select) select.innerHTML = members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
-        const editSelect = document.getElementById('editDepositMemberSelect');
-        if (editSelect) editSelect.innerHTML = members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+        function saveMember() {
+            const id = document.getElementById('editMemberId').value;
+            const name = document.getElementById('newMemberName').value.trim();
+            const phone = document.getElementById('newMemberPhone').value.trim();
+            const color = document.getElementById('newMemberColor').value;
+            if (!name) { showToast('নাম লিখুন!', 'error'); return; }
 
-        const currentDeposits = depositData.filter(item => item.date && item.date.startsWith(selectedMonth));
-        const listTable = document.getElementById('depositListTable');
-        let sum = 0;
-        if (currentDeposits.length === 0) {
-            listTable.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">এই মাসে কোনো জমা নেই</td></tr>`;
-        } else {
-            listTable.innerHTML = currentDeposits.map(item => {
-                const member = members.find(m => m.id === item.memberId) || { name: 'অজানা' };
-                sum += Number(item.amount) || 0;
+            if (id) {
+                const member = members.find(m => m.id === id);
+                if (member) { member.name = name; member.phone = phone; member.color = color; }
+                showToast('মেম্বার আপডেট');
+            } else {
+                const newId = 'm_' + Date.now();
+                members.push({ id: newId, name, phone, color, offSchedule: { m: false, l: false, d: false } });
+                showToast('✅ নতুন মেম্বার যোগ হয়েছে!');
+            }
+            pushDataToFirebase();
+            closeMemberModal();
+            renderAll();
+        }
+        function deleteMember(id) {
+            if (confirm('ডিলিট করবেন?')) {
+                members = members.filter(m => m.id !== id);
+                pushDataToFirebase();
+                renderAll();
+                showToast('ডিলিট হয়েছে');
+            }
+        }
+
+        // SCHEDULE
+        function renderScheduleTab() {
+            const tbody = document.getElementById('scheduleTableBody');
+            if (members.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">কোনো মেম্বার নেই</td></tr>`; return; }
+            tbody.innerHTML = members.map(m => {
+                const sched = m.offSchedule || { m: false, l: false, d: false };
                 return `
                     <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
-                        <td class="p-3 font-medium text-slate-700 dark:text-slate-300">${item.date}</td>
-                        <td class="p-3 font-semibold text-slate-800 dark:text-slate-100">${member.name}</td>
-                        <td class="p-3 text-slate-600 dark:text-slate-400">${item.note || '-'}</td>
-                        <td class="p-3 font-bold text-emerald-600 dark:text-emerald-400 text-right">৳${Number(item.amount).toLocaleString('bn-BD')}</td>
-                        <td class="p-3 text-center">
-                            <div class="flex items-center justify-center gap-1.5">
-                                <button onclick="requireAdmin(() => openEditDepositModal('${item.id}'))" class="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 p-1.5 rounded-lg transition"><i class="fa-solid fa-pen-to-square"></i></button>
-                                <button onclick="requireAdmin(() => deleteDeposit('${item.id}'))" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950 p-1.5 rounded-lg transition"><i class="fa-solid fa-trash-can"></i></button>
-                            </div>
+                        <td class="p-3.5 border border-slate-200 dark:border-slate-800 font-semibold text-slate-800 dark:text-slate-100">${m.name}</td>
+                        <td class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">
+                            <button onclick="requireAdmin(() => toggleOffSchedule('${m.id}', 'm'))" class="px-3 py-1.5 rounded-xl text-xs font-bold transition ${sched.m ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800'}">${sched.m ? 'Off' : 'On'}</button>
+                        </td>
+                        <td class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">
+                            <button onclick="requireAdmin(() => toggleOffSchedule('${m.id}', 'l'))" class="px-3 py-1.5 rounded-xl text-xs font-bold transition ${sched.l ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800'}">${sched.l ? 'Off' : 'On'}</button>
+                        </td>
+                        <td class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">
+                            <button onclick="requireAdmin(() => toggleOffSchedule('${m.id}', 'd'))" class="px-3 py-1.5 rounded-xl text-xs font-bold transition ${sched.d ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-400 border border-rose-300 dark:border-rose-800' : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border border-emerald-300 dark:border-emerald-800'}">${sched.d ? 'Off' : 'On'}</button>
+                        </td>
+                        <td class="p-3.5 border border-slate-200 dark:border-slate-800 text-center">
+                            <button onclick="requireAdmin(() => applyBulkMealOff('${m.id}'))" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-3 py-1.5 rounded-xl shadow-sm transition flex items-center justify-center gap-1 mx-auto">
+                                <i class="fa-solid fa-check-double"></i><span>অ্যাপ্লাই</span>
+                            </button>
                         </td>
                     </tr>`;
             }).join('');
         }
-        document.getElementById('depositTotalSum').textContent = sum.toLocaleString('bn-BD');
-    }
-    function handleAddDeposit(e) {
-        e.preventDefault();
-        requireAdmin(() => {
-            const date = document.getElementById('depositDate').value;
-            const memberId = document.getElementById('depositMemberSelect').value;
-            const amount = parseFloat(document.getElementById('depositAmount').value) || 0;
-            const note = document.getElementById('depositNote').value.trim();
-            if (amount <= 0) { showToast('সঠিক পরিমাণ দিন', 'error'); return; }
-            depositData.push({ id: 'd_' + Date.now(), date, memberId, amount, note });
-            pushDataToFirebase();
-            document.getElementById('depositAmount').value = '';
-            document.getElementById('depositNote').value = '';
-            renderAll();
-            showToast('জমা সেভ!');
-        });
-    }
-    function openEditDepositModal(id) {
-        const deposit = depositData.find(d => d.id === id);
-        if (!deposit) return;
-        document.getElementById('editDepositId').value = deposit.id;
-        document.getElementById('editDepositDate').value = deposit.date;
-        document.getElementById('editDepositMemberSelect').value = deposit.memberId;
-        document.getElementById('editDepositAmount').value = deposit.amount;
-        document.getElementById('editDepositNote').value = deposit.note || '';
-        document.getElementById('editDepositModal').classList.remove('hidden');
-    }
-    function closeEditDepositModal() { document.getElementById('editDepositModal').classList.add('hidden'); }
-    function saveEditDeposit() {
-        const id = document.getElementById('editDepositId').value;
-        const date = document.getElementById('editDepositDate').value;
-        const memberId = document.getElementById('editDepositMemberSelect').value;
-        const amount = parseFloat(document.getElementById('editDepositAmount').value) || 0;
-        const note = document.getElementById('editDepositNote').value.trim();
-        if (amount <= 0) { showToast('সঠিক পরিমাণ দিন', 'error'); return; }
-        const deposit = depositData.find(d => d.id === id);
-        if (deposit) {
-            deposit.date = date; deposit.memberId = memberId;
-            deposit.amount = amount; deposit.note = note;
-            pushDataToFirebase();
-            closeEditDepositModal();
-            renderAll();
-            showToast('আপডেট!');
+        function toggleOffSchedule(memberId, mealType) {
+            const member = members.find(m => m.id === memberId);
+            if (member) {
+                if (!member.offSchedule) member.offSchedule = { m: false, l: false, d: false };
+                member.offSchedule[mealType] = !member.offSchedule[mealType];
+                pushDataToFirebase();
+                renderScheduleTab();
+                showToast('আপডেট');
+            }
         }
-    }
-    function deleteDeposit(id) {
-        if (confirm('ডিলিট করবেন?')) {
-            depositData = depositData.filter(d => d.id !== id);
+        function applyBulkMealOff(memberId) {
+            const member = members.find(m => m.id === memberId);
+            if (!member) return;
+            const daysCount = getDaysInMonth(selectedMonth);
+            const { m: offM, l: offL, d: offD } = member.offSchedule || { m: false, l: false, d: false };
+            for (let day = 1; day <= daysCount; day++) {
+                const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+                if (!mealsData[dateStr]) mealsData[dateStr] = {};
+                if (!mealsData[dateStr][memberId]) mealsData[dateStr][memberId] = { m: 1, l: 1, d: 1 };
+                if (offM) mealsData[dateStr][memberId].m = 0;
+                if (offL) mealsData[dateStr][memberId].l = 0;
+                if (offD) mealsData[dateStr][memberId].d = 0;
+            }
+            pushDataToFirebase();
+            renderAll();
+            showToast(`${member.name}-এর জন্য অ্যাপ্লাই!`);
+        }
+
+        // 🗳️ DAILY POLLS
+        function getPollForDate(dateStr) {
+            if (!polls[dateStr]) {
+                polls[dateStr] = { m: { votes: {} }, l: { votes: {} }, d: { votes: {} } };
+            }
+            if (!polls[dateStr].m) polls[dateStr].m = { votes: {} };
+            if (!polls[dateStr].l) polls[dateStr].l = { votes: {} };
+            if (!polls[dateStr].d) polls[dateStr].d = { votes: {} };
+            if (!polls[dateStr].m.votes) polls[dateStr].m.votes = {};
+            if (!polls[dateStr].l.votes) polls[dateStr].l.votes = {};
+            if (!polls[dateStr].d.votes) polls[dateStr].d.votes = {};
+            return polls[dateStr];
+        }
+
+        function renderPollsTab() {
+            const container = document.getElementById('pollsContainer');
+            const datePicker = document.getElementById('pollDatePicker');
+            if (!container || !datePicker) return;
+
+            const dateStr = datePicker.value || new Date().toISOString().slice(0, 10);
+            const poll = getPollForDate(dateStr);
+
+            const mealsConfig = [
+                { key: 'm', label: 'সকালের মিল', time: 'সকাল ৭টা - ৯টা', color: 'yellow', icon: 'fa-sun' },
+                { key: 'l', label: 'দুপুরের মিল', time: 'দুপুর ১টা - ২টা', color: 'orange', icon: 'fa-cloud-sun' },
+                { key: 'd', label: 'রাতের মিল', time: 'রাত ৮টা - ১০টা', color: 'indigo', icon: 'fa-moon' }
+            ];
+
+            let adminBannerHTML = '';
+            if (!isAdmin) {
+                adminBannerHTML = `
+                    <div class="bg-amber-50 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700 rounded-2xl p-4 mb-4 flex items-center gap-3 flex-wrap">
+                        <div class="w-12 h-12 rounded-2xl bg-amber-400 text-amber-900 flex items-center justify-center text-xl shadow flex-shrink-0">
+                            <i class="fa-solid fa-lock"></i>
+                        </div>
+                        <div class="flex-1 min-w-[150px]">
+                            <p class="font-bold text-amber-900 dark:text-amber-200 text-sm">🔒 ভোট দিতে এডমিন লগইন লাগবে</p>
+                            <p class="text-[11px] text-amber-800 dark:text-amber-300 mt-0.5">আপনি এখন ভিউয়ার মোডে আছেন। উপরে "এডমিন লগইন" বাটনে ক্লিক করুন।</p>
+                        </div>
+                        <button onclick="toggleAdminAuth()" class="bg-amber-500 hover:bg-amber-400 text-white font-bold px-4 py-2 rounded-xl text-xs shadow transition flex items-center gap-1.5 flex-shrink-0">
+                            <i class="fa-solid fa-key"></i>
+                            <span>লগইন</span>
+                        </button>
+                    </div>
+                `;
+            } else {
+                adminBannerHTML = `
+                    <div class="bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700 rounded-2xl p-3 mb-4 flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center text-lg shadow flex-shrink-0">
+                            <i class="fa-solid fa-lock-open"></i>
+                        </div>
+                        <div class="flex-1">
+                            <p class="font-bold text-emerald-900 dark:text-emerald-200 text-sm">✅ এডমিন মোড — আপনি ভোট দিতে পারবেন</p>
+                            <p class="text-[11px] text-emerald-800 dark:text-emerald-300 mt-0.5">প্রতিটি মেম্বারের হয়ে হ্যাঁ/না বাটনে ক্লিক করে ভোট দিন</p>
+                        </div>
+                    </div>
+                `;
+            }
+
+            let html = `
+                ${adminBannerHTML}
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="date-badge text-white px-4 py-2 rounded-2xl shadow-lg flex items-center gap-2">
+                        <i class="fa-solid fa-calendar-check"></i>
+                        <span class="font-bold text-sm">${formatBengaliDate(dateStr)}</span>
+                    </div>
+                </div>
+            `;
+
+            mealsConfig.forEach(meal => {
+                const voteData = poll[meal.key].votes || {};
+                const entries = Object.entries(voteData);
+                const yesCount = entries.filter(([_, qty]) => Number(qty) > 0).length;
+                const noCount = entries.filter(([_, qty]) => Number(qty) === 0).length;
+                const totalVoted = yesCount + noCount;
+
+                const memberRows = members.map(member => {
+                    const memberVote = voteData[member.id];
+                    const hasVoted = memberVote !== undefined;
+                    const qty = Number(memberVote) || 0;
+                    const isYes = hasVoted && qty > 0;
+                    const isNo = hasVoted && qty === 0;
+                    const initials = (member.name || '?').trim().charAt(0);
+
+                    return `
+                        <div class="member-row flex items-center justify-between p-2.5 gap-2">
+                            <div class="flex items-center gap-2.5 flex-1 min-w-0">
+                                <div class="w-10 h-10 rounded-full ${member.color || 'bg-indigo-600'} text-white font-bold flex items-center justify-center text-sm shadow flex-shrink-0">
+                                    ${initials}
+                                </div>
+                                <div class="min-w-0 flex-1">
+                                    <p class="font-bold text-slate-800 dark:text-slate-100 text-sm truncate">${member.name}</p>
+                                    ${hasVoted ? `<p class="text-[10px] ${isYes ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'} font-semibold">
+                                        ${isYes ? `✅ হ্যাঁ — ${qty} মিল` : '❌ না — 0 মিল'}
+                                    </p>` : `<p class="text-[10px] text-slate-400">ভোট দেয়নি</p>`}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1.5 flex-shrink-0">
+                                <button onclick="openVoteQtyModal('${dateStr}', '${meal.key}', '${member.id}', true)"
+                                    class="vote-btn-yes ${isYes ? 'selected' : ''} text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1 shadow-md min-w-[60px] justify-center">
+                                    <i class="fa-solid fa-check"></i>
+                                    <span>হ্যাঁ</span>
+                                </button>
+                                <button onclick="openVoteQtyModal('${dateStr}', '${meal.key}', '${member.id}', false)"
+                                    class="vote-btn-no ${isNo ? 'selected' : ''} text-white font-bold px-3 py-2 rounded-xl text-xs flex items-center gap-1 shadow-md min-w-[60px] justify-center">
+                                    <i class="fa-solid fa-xmark"></i>
+                                    <span>না</span>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                const colorMap = {
+                    yellow: { bg: 'bg-yellow-50 dark:bg-yellow-950/40', border: 'border-yellow-200 dark:border-yellow-800', iconBg: 'bg-yellow-400 text-yellow-900' },
+                    orange: { bg: 'bg-orange-50 dark:bg-orange-950/40', border: 'border-orange-200 dark:border-orange-800', iconBg: 'bg-orange-400 text-orange-900' },
+                    indigo: { bg: 'bg-indigo-50 dark:bg-indigo-950/40', border: 'border-indigo-200 dark:border-indigo-800', iconBg: 'bg-indigo-500 text-white' }
+                };
+                const c = colorMap[meal.color];
+
+                html += `
+                    <div class="poll-card overflow-hidden">
+                        <div class="${c.bg} border-b ${c.border} p-4 flex items-center justify-between gap-3 flex-wrap">
+                            <div class="flex items-center gap-3">
+                                <div class="w-12 h-12 rounded-2xl ${c.iconBg} flex items-center justify-center text-xl shadow">
+                                    <i class="fa-solid ${meal.icon}"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-bold text-slate-800 dark:text-slate-100 text-base">${meal.label}</h3>
+                                    <p class="text-[11px] text-slate-500 dark:text-slate-400">${meal.time}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 text-xs font-bold flex-wrap">
+                                <span class="bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                                    ✅ ${yesCount}
+                                </span>
+                                <span class="bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 px-3 py-1.5 rounded-full border border-rose-200 dark:border-rose-800">
+                                    ❌ ${noCount}
+                                </span>
+                                <span class="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700">
+                                    ${totalVoted}/${members.length}
+                                </span>
+                            </div>
+                        </div>
+                        <div class="p-2">
+                            ${members.length === 0 ? '<p class="text-center text-slate-400 py-6 text-sm">কোনো মেম্বার নেই</p>' : memberRows}
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        // Vote modal — শুধু এডমিনের জন্য
+        function openVoteQtyModal(dateStr, mealType, memberId, voteValue) {
+            // 🔒 পারমিশন চেক
+            if (!isAdmin) {
+                showToast('🔒 ভোট দিতে এডমিন লগইন করুন', 'error');
+                pendingAdminCallback = () => {
+                    setTimeout(() => openVoteQtyModal(dateStr, mealType, memberId, voteValue), 300);
+                };
+                document.getElementById('adminPinInput').value = '';
+                document.getElementById('adminModal').classList.remove('hidden');
+                return;
+            }
+
+            const member = members.find(m => m.id === memberId);
+            if (!member) return;
+
+            pendingVote = { dateStr, mealType, memberId, voteValue };
+
+            const mealNames = { m: 'সকালের মিল', l: 'দুপুরের মিল', d: 'রাতের মিল' };
+            const mealName = mealNames[mealType];
+            const modal = document.getElementById('voteQtyModal');
+            const iconWrap = document.getElementById('voteQtyIconWrap');
+            const icon = document.getElementById('voteQtyIcon');
+
+            if (voteValue) {
+                iconWrap.className = "w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2 text-2xl shadow-inner bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400";
+                icon.className = "fa-solid fa-check";
+                document.getElementById('voteQtyTitle').textContent = `${member.name} — হ্যাঁ`;
+                document.getElementById('voteQtySubtitle').textContent = `${mealName} · কত মিল খাবেন?`;
+                document.getElementById('voteQtyInput').value = 1;
+                document.getElementById('voteQtyInput').parentElement.style.display = 'block';
+                document.querySelectorAll('#voteQtyModal .meal-qty-btn').forEach(b => b.classList.remove('selected'));
+                const btns = document.querySelectorAll('#voteQtyModal .meal-qty-btn');
+                btns.forEach(b => {
+                    if (b.textContent.trim() === '1') b.classList.add('selected');
+                });
+            } else {
+                iconWrap.className = "w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2 text-2xl shadow-inner bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400";
+                icon.className = "fa-solid fa-xmark";
+                document.getElementById('voteQtyTitle').textContent = `${member.name} — না`;
+                document.getElementById('voteQtySubtitle').textContent = `${mealName} · খাবেন না (0 মিল)`;
+                document.getElementById('voteQtyInput').value = 0;
+                document.getElementById('voteQtyInput').parentElement.style.display = 'none';
+                document.querySelectorAll('#voteQtyModal .meal-qty-btn').forEach(b => b.classList.remove('selected'));
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        function selectQty(event, val) {
+            document.getElementById('voteQtyInput').value = val;
+            document.querySelectorAll('#voteQtyModal .meal-qty-btn').forEach(b => b.classList.remove('selected'));
+            event.target.classList.add('selected');
+        }
+
+        function closeVoteQtyModal() {
+            document.getElementById('voteQtyModal').classList.add('hidden');
+            pendingVote = null;
+        }
+
+        function confirmVoteWithQty() {
+            if (!pendingVote) return;
+            // 🔒 Double-check admin
+            if (!isAdmin) {
+                closeVoteQtyModal();
+                showToast('🔒 ভোট দিতে এডমিন লগইন করুন', 'error');
+                return;
+            }
+
+            const { dateStr, mealType, memberId, voteValue } = pendingVote;
+            let qty;
+            if (voteValue === false) {
+                qty = 0;
+            } else {
+                qty = parseFloat(document.getElementById('voteQtyInput').value) || 1;
+                if (qty < 0) qty = 0;
+            }
+
+            const poll = getPollForDate(dateStr);
+            poll[mealType].votes[memberId] = qty;
+
+            if (!mealsData[dateStr]) mealsData[dateStr] = {};
+            if (!mealsData[dateStr][memberId]) mealsData[dateStr][memberId] = { m: 0, l: 0, d: 0 };
+            mealsData[dateStr][memberId][mealType] = qty;
+
+            pushDataToFirebase();
+            closeVoteQtyModal();
+            renderPollsTab();
+            renderMealSheet();
+            updateTopMetrics();
+
+            const member = members.find(m => m.id === memberId);
+            if (qty > 0) {
+                showToast(`✅ ${member?.name} — ${qty} মিল ভোট রেকর্ড`);
+            } else {
+                showToast(`❌ ${member?.name} — খাবেন না (0 মিল)`);
+            }
+        }
+
+        // DEPOSIT
+        function renderDepositTab() {
+            const select = document.getElementById('depositMemberSelect');
+            if (select) select.innerHTML = members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+            const editSelect = document.getElementById('editDepositMemberSelect');
+            if (editSelect) editSelect.innerHTML = members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+
+            const currentDeposits = depositData.filter(item => item.date && item.date.startsWith(selectedMonth));
+            const listTable = document.getElementById('depositListTable');
+            let sum = 0;
+            if (currentDeposits.length === 0) {
+                listTable.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">এই মাসে কোনো জমা নেই</td></tr>`;
+            } else {
+                listTable.innerHTML = currentDeposits.map(item => {
+                    const member = members.find(m => m.id === item.memberId) || { name: 'অজানা' };
+                    sum += Number(item.amount) || 0;
+                    return `
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
+                            <td class="p-3 font-medium text-slate-700 dark:text-slate-300">${item.date}</td>
+                            <td class="p-3 font-semibold text-slate-800 dark:text-slate-100">${member.name}</td>
+                            <td class="p-3 text-slate-600 dark:text-slate-400">${item.note || '-'}</td>
+                            <td class="p-3 font-bold text-emerald-600 dark:text-emerald-400 text-right">৳${Number(item.amount).toLocaleString('bn-BD')}</td>
+                            <td class="p-3 text-center">
+                                <div class="flex items-center justify-center gap-1.5">
+                                    <button onclick="requireAdmin(() => openEditDepositModal('${item.id}'))" class="text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 dark:hover:bg-indigo-950 p-1.5 rounded-lg transition"><i class="fa-solid fa-pen-to-square"></i></button>
+                                    <button onclick="requireAdmin(() => deleteDeposit('${item.id}'))" class="text-rose-500 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950 p-1.5 rounded-lg transition"><i class="fa-solid fa-trash-can"></i></button>
+                                </div>
+                            </td>
+                        </tr>`;
+                }).join('');
+            }
+            document.getElementById('depositTotalSum').textContent = sum.toLocaleString('bn-BD');
+        }
+        function handleAddDeposit(e) {
+            e.preventDefault();
+            requireAdmin(() => {
+                const date = document.getElementById('depositDate').value;
+                const memberId = document.getElementById('depositMemberSelect').value;
+                const amount = parseFloat(document.getElementById('depositAmount').value) || 0;
+                const note = document.getElementById('depositNote').value.trim();
+                if (amount <= 0) { showToast('সঠিক পরিমাণ দিন', 'error'); return; }
+                depositData.push({ id: 'd_' + Date.now(), date, memberId, amount, note });
+                pushDataToFirebase();
+                document.getElementById('depositAmount').value = '';
+                document.getElementById('depositNote').value = '';
+                renderAll();
+                showToast('জমা সেভ!');
+            });
+        }
+        function openEditDepositModal(id) {
+            const deposit = depositData.find(d => d.id === id);
+            if (!deposit) return;
+            document.getElementById('editDepositId').value = deposit.id;
+            document.getElementById('editDepositDate').value = deposit.date;
+            document.getElementById('editDepositMemberSelect').value = deposit.memberId;
+            document.getElementById('editDepositAmount').value = deposit.amount;
+            document.getElementById('editDepositNote').value = deposit.note || '';
+            document.getElementById('editDepositModal').classList.remove('hidden');
+        }
+        function closeEditDepositModal() { document.getElementById('editDepositModal').classList.add('hidden'); }
+        function saveEditDeposit() {
+            const id = document.getElementById('editDepositId').value;
+            const date = document.getElementById('editDepositDate').value;
+            const memberId = document.getElementById('editDepositMemberSelect').value;
+            const amount = parseFloat(document.getElementById('editDepositAmount').value) || 0;
+            const note = document.getElementById('editDepositNote').value.trim();
+            if (amount <= 0) { showToast('সঠিক পরিমাণ দিন', 'error'); return; }
+            const deposit = depositData.find(d => d.id === id);
+            if (deposit) {
+                deposit.date = date; deposit.memberId = memberId;
+                deposit.amount = amount; deposit.note = note;
+                pushDataToFirebase();
+                closeEditDepositModal();
+                renderAll();
+                showToast('আপডেট!');
+            }
+        }
+        function deleteDeposit(id) {
+            if (confirm('ডিলিট করবেন?')) {
+                depositData = depositData.filter(d => d.id !== id);
+                pushDataToFirebase();
+                renderAll();
+                showToast('ডিলিট');
+            }
+        }
+
+        // BAZAR
+        function renderBazarTab() {
+            const select = document.getElementById('bazarMemberSelect');
+            if (select) select.innerHTML = members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
+            const currentBazar = bazarData.filter(item => item.date && item.date.startsWith(selectedMonth));
+            const listTable = document.getElementById('bazarListTable');
+            let sum = 0;
+            if (currentBazar.length === 0) {
+                listTable.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">এই মাসে কোনো বাজার নেই</td></tr>`;
+            } else {
+                listTable.innerHTML = currentBazar.map(item => {
+                    const member = members.find(m => m.id === item.memberId) || { name: 'অজানা' };
+                    sum += Number(item.amount) || 0;
+                    const catText = item.category || 'বাজার';
+                    const isGas = catText.includes('গ্যাস') || catText.includes('Gas');
+                    return `
+                        <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
+                            <td class="p-3 font-medium text-slate-700 dark:text-slate-300">${item.date}</td>
+                            <td class="p-3 font-semibold text-slate-800 dark:text-slate-100">${member.name}</td>
+                            <td class="p-3">
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${isGas ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800' : 'bg-slate-100 dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-slate-200 dark:border-slate-700'}">${catText}</span>
+                            </td>
+                            <td class="p-3 text-slate-600 dark:text-slate-400">${item.note || '-'}</td>
+                            <td class="p-3 font-bold text-rose-600 dark:text-rose-400 text-right">৳${Number(item.amount).toLocaleString('bn-BD')}</td>
+                            <td class="p-3 text-center">
+                                <button onclick="requireAdmin(() => deleteBazar('${item.id}'))" class="text-rose-500 hover:text-rose-700 p-1"><i class="fa-solid fa-trash-can"></i></button>
+                            </td>
+                        </tr>`;
+                }).join('');
+            }
+            document.getElementById('bazarTotalSum').textContent = sum.toLocaleString('bn-BD');
+        }
+        function handleAddBazar(e) {
+            e.preventDefault();
+            requireAdmin(() => {
+                const date = document.getElementById('bazarDate').value;
+                const memberId = document.getElementById('bazarMemberSelect').value;
+                const category = document.getElementById('bazarCategory').value.trim() || 'বাজার';
+                const amount = parseFloat(document.getElementById('bazarAmount').value) || 0;
+                const note = document.getElementById('bazarNote').value.trim();
+                if (amount <= 0) { showToast('সঠিক পরিমাণ দিন', 'error'); return; }
+                bazarData.push({ id: 'b_' + Date.now(), date, memberId, category, amount, note });
+                pushDataToFirebase();
+                document.getElementById('bazarAmount').value = '';
+                document.getElementById('bazarNote').value = '';
+                renderAll();
+                showToast('বাজার সেভ!');
+            });
+        }
+        function deleteBazar(id) {
+            bazarData = bazarData.filter(b => b.id !== id);
             pushDataToFirebase();
             renderAll();
             showToast('ডিলিট');
         }
-    }
 
-    // BAZAR
-    function renderBazarTab() {
-        const select = document.getElementById('bazarMemberSelect');
-        if (select) select.innerHTML = members.map(m => `<option value="${m.id}">${m.name}</option>`).join('');
-        const currentBazar = bazarData.filter(item => item.date && item.date.startsWith(selectedMonth));
-        const listTable = document.getElementById('bazarListTable');
-        let sum = 0;
-        if (currentBazar.length === 0) {
-            listTable.innerHTML = `<tr><td colspan="6" class="p-4 text-center text-slate-400">এই মাসে কোনো বাজার নেই</td></tr>`;
-        } else {
-            listTable.innerHTML = currentBazar.map(item => {
-                const member = members.find(m => m.id === item.memberId) || { name: 'অজানা' };
-                sum += Number(item.amount) || 0;
-                const catText = item.category || 'বাজার';
-                const isGas = catText.includes('গ্যাস') || catText.includes('Gas');
+        // SUMMARY
+        function renderSummaryTab() {
+            const stats = calculateStats();
+            const tbody = document.getElementById('summaryTableBody');
+            if (members.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">কোনো মেম্বার নেই</td></tr>`; return; }
+            tbody.innerHTML = members.map(m => {
+                const totalMeals = stats.memberMealTotals[m.id] || 0;
+                const mealCost = totalMeals * stats.mealRate;
+                const totalDeposit = stats.memberDepositTotals[m.id] || 0;
+                const finalBalance = totalDeposit - mealCost;
+                const isPlus = finalBalance >= 0;
                 return `
-                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
-                        <td class="p-3 font-medium text-slate-700 dark:text-slate-300">${item.date}</td>
-                        <td class="p-3 font-semibold text-slate-800 dark:text-slate-100">${member.name}</td>
-                        <td class="p-3">
-                            <span class="px-2.5 py-1 rounded-full text-[10px] font-bold ${isGas ? 'bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800' : 'bg-slate-100 dark:bg-slate-800 text-indigo-700 dark:text-indigo-300 border border-slate-200 dark:border-slate-700'}">${catText}</span>
+                    <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 font-medium">
+                        <td class="p-3.5 font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full ${m.color || 'bg-indigo-600'} text-white font-bold flex items-center justify-center text-[10px]">${(m.name||'?').trim().charAt(0)}</div>
+                            <span>${m.name}</span>
                         </td>
-                        <td class="p-3 text-slate-600 dark:text-slate-400">${item.note || '-'}</td>
-                        <td class="p-3 font-bold text-rose-600 dark:text-rose-400 text-right">৳${Number(item.amount).toLocaleString('bn-BD')}</td>
-                        <td class="p-3 text-center">
-                            <button onclick="requireAdmin(() => deleteBazar('${item.id}'))" class="text-rose-500 hover:text-rose-700 p-1"><i class="fa-solid fa-trash-can"></i></button>
+                        <td class="p-3.5 text-center text-slate-700 dark:text-slate-300 font-bold">${totalMeals.toFixed(2)}</td>
+                        <td class="p-3.5 text-right text-rose-600 dark:text-rose-400 font-medium">৳${mealCost.toFixed(1)}</td>
+                        <td class="p-3.5 text-right text-emerald-600 dark:text-emerald-400 font-bold">৳${totalDeposit}</td>
+                        <td class="p-3.5 text-right font-bold text-xs ${isPlus ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'}">
+                            ${isPlus ? 'পাবে: +' : 'দিবে: '}৳${Math.abs(finalBalance).toFixed(1)}
                         </td>
                     </tr>`;
             }).join('');
         }
-        document.getElementById('bazarTotalSum').textContent = sum.toLocaleString('bn-BD');
-    }
-    function handleAddBazar(e) {
-        e.preventDefault();
-        requireAdmin(() => {
-            const date = document.getElementById('bazarDate').value;
-            const memberId = document.getElementById('bazarMemberSelect').value;
-            const category = document.getElementById('bazarCategory').value.trim() || 'বাজার';
-            const amount = parseFloat(document.getElementById('bazarAmount').value) || 0;
-            const note = document.getElementById('bazarNote').value.trim();
-            if (amount <= 0) { showToast('সঠিক পরিমাণ দিন', 'error'); return; }
-            bazarData.push({ id: 'b_' + Date.now(), date, memberId, category, amount, note });
-            pushDataToFirebase();
-            document.getElementById('bazarAmount').value = '';
-            document.getElementById('bazarNote').value = '';
-            renderAll();
-            showToast('বাজার সেভ!');
-        });
-    }
-    function deleteBazar(id) {
-        bazarData = bazarData.filter(b => b.id !== id);
-        pushDataToFirebase();
-        renderAll();
-        showToast('ডিলিট');
-    }
 
-    // SUMMARY
-    function renderSummaryTab() {
-        const stats = calculateStats();
-        const tbody = document.getElementById('summaryTableBody');
-        if (members.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">কোনো মেম্বার নেই</td></tr>`; return; }
-        tbody.innerHTML = members.map(m => {
-            const totalMeals = stats.memberMealTotals[m.id] || 0;
-            const mealCost = totalMeals * stats.mealRate;
-            const totalDeposit = stats.memberDepositTotals[m.id] || 0;
-            const finalBalance = totalDeposit - mealCost;
-            const isPlus = finalBalance >= 0;
-            return `
-                <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/40 font-medium">
-                    <td class="p-3.5 font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                        <div class="w-6 h-6 rounded-full ${m.color || 'bg-indigo-600'} text-white font-bold flex items-center justify-center text-[10px]">${(m.name||'?').trim().charAt(0)}</div>
-                        <span>${m.name}</span>
-                    </td>
-                    <td class="p-3.5 text-center text-slate-700 dark:text-slate-300 font-bold">${totalMeals.toFixed(2)}</td>
-                    <td class="p-3.5 text-right text-rose-600 dark:text-rose-400 font-medium">৳${mealCost.toFixed(1)}</td>
-                    <td class="p-3.5 text-right text-emerald-600 dark:text-emerald-400 font-bold">৳${totalDeposit}</td>
-                    <td class="p-3.5 text-right font-bold text-xs ${isPlus ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'}">
-                        ${isPlus ? 'পাবে: +' : 'দিবে: '}৳${Math.abs(finalBalance).toFixed(1)}
-                    </td>
-                </tr>`;
-        }).join('');
-    }
+        // CSV
+        function exportToCSV() {
+            const stats = calculateStats();
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+            csvContent += `Mess: ${messDetails.name} (${currentMessId})\nMonth: ${getBengaliMonthYear(selectedMonth)}\n\n`;
+            csvContent += `Member,Total Meals,Meal Cost (BDT),Total Deposit (BDT),Final Balance (BDT)\n`;
+            members.forEach(m => {
+                const totalMeals = stats.memberMealTotals[m.id] || 0;
+                const mealCost = (totalMeals * stats.mealRate).toFixed(1);
+                const totalDeposit = stats.memberDepositTotals[m.id] || 0;
+                const finalBalance = (totalDeposit - mealCost).toFixed(1);
+                csvContent += `"${m.name}",${totalMeals},${mealCost},${totalDeposit},${finalBalance}\n`;
+            });
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `Mess_${currentMessId}_${selectedMonth}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            showToast('CSV ডাউনলোড!');
+        }
 
-    // CSV
-    function exportToCSV() {
-        const stats = calculateStats();
-        let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
-        csvContent += `Mess: ${messDetails.name} (${currentMessId})\nMonth: ${getBengaliMonthYear(selectedMonth)}\n\n`;
-        csvContent += `Member,Total Meals,Meal Cost (BDT),Total Deposit (BDT),Final Balance (BDT)\n`;
-        members.forEach(m => {
-            const totalMeals = stats.memberMealTotals[m.id] || 0;
-            const mealCost = (totalMeals * stats.mealRate).toFixed(1);
-            const totalDeposit = stats.memberDepositTotals[m.id] || 0;
-            const finalBalance = (totalDeposit - mealCost).toFixed(1);
-            csvContent += `"${m.name}",${totalMeals},${mealCost},${totalDeposit},${finalBalance}\n`;
-        });
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `Mess_${currentMessId}_${selectedMonth}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        showToast('CSV ডাউনলোড!');
-    }
-
-    // TOAST
-    function showToast(msg, type = 'success') {
-        const toast = document.getElementById('toast');
-        const toastMsg = document.getElementById('toastMsg');
-        const toastIcon = document.getElementById('toastIcon');
-        toastMsg.textContent = msg;
-        if (type === 'error') toastIcon.className = "fa-solid fa-circle-xmark text-rose-400 text-base";
-        else if (type === 'info') toastIcon.className = "fa-solid fa-circle-info text-amber-400 text-base";
-        else toastIcon.className = "fa-solid fa-circle-check text-emerald-400 text-base";
-        toast.classList.add('toast-show');
-        setTimeout(() => toast.classList.remove('toast-show'), 3000);
-    }
-</script>
+        // TOAST
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+            toastMsg.textContent = msg;
+            if (type === 'error') toastIcon.className = "fa-solid fa-circle-xmark text-rose-400 text-base";
+            else if (type === 'info') toastIcon.className = "fa-solid fa-circle-info text-amber-400 text-base";
+            else toastIcon.className = "fa-solid fa-circle-check text-emerald-400 text-base";
+            toast.classList.add('toast-show');
+            setTimeout(() => toast.classList.remove('toast-show'), 3000);
+        }
+    </script>
+</body>
+</html>
